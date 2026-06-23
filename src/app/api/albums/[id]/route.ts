@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isSupabaseConfigured } from "@/lib/supabase";
 import { deleteAlbum, updateAlbum } from "@/lib/data";
 
 // Update an album's metadata (currently just title) — used by the
@@ -8,12 +7,6 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!isSupabaseConfigured) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase is not configured." },
-      { status: 503 },
-    );
-  }
   const { id } = await params;
 
   let body: { title?: unknown; date?: unknown; end_date?: unknown };
@@ -98,12 +91,6 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!isSupabaseConfigured) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase is not configured." },
-      { status: 503 },
-    );
-  }
   const { id } = await params;
 
   const ok = await deleteAlbum(id);

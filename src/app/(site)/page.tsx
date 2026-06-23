@@ -5,6 +5,7 @@ import HomeCover from "@/components/home-cover";
 import DailySlideshow from "@/components/daily-slideshow";
 import SpecialDesign from "@/components/special-design";
 import { getScheduleEvents, getAllPhotos } from "@/lib/data";
+import { getSpaceContext } from "@/lib/space";
 import { dailyPick, todayKey } from "@/lib/daily-pick";
 
 const DAILY_COUNT = 20;
@@ -44,10 +45,12 @@ function relativeDay(iso: string): string {
 }
 
 export default async function HomePage() {
-  const [schedule, allPhotos] = await Promise.all([
+  const [schedule, allPhotos, ctx] = await Promise.all([
     getScheduleEvents(),
     getAllPhotos(),
+    getSpaceContext(),
   ]);
+  const anniversaryDate = ctx?.space.anniversaryDate ?? null;
 
   // eslint-disable-next-line react-hooks/purity -- Server Component rendered per request; reading the current time here is intentional.
   const now = Date.now();
@@ -76,7 +79,7 @@ export default async function HomePage() {
           <SpecialDesign />
         </header>
 
-        <AnniversaryCounter />
+        <AnniversaryCounter anniversaryDate={anniversaryDate} />
 
         <div className="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-2">
           {/* Next Up */}

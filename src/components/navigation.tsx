@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
-import { Heart, Menu, X, LogOut } from "lucide-react";
+import { Heart, Menu, X } from "lucide-react";
 import { navRoutes, type NavRoute } from "@/config/navigation";
 import { useJourneyAdmin } from "@/components/journey-admin-context";
+import UserMenu from "@/components/user-menu";
 
 function Brand() {
   const { isJourneyAdmin, toggleJourneyAdmin, showToast } = useJourneyAdmin();
@@ -66,27 +67,18 @@ function NavLink({
   );
 }
 
-const logoutButtonClass =
-  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50";
-
-export default function Navigation() {
+export default function Navigation({
+  username,
+  avatarUrl,
+}: {
+  username: string | null;
+  avatarUrl: string | null;
+}) {
   const pathname = usePathname();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   const isActive = (path: string) =>
     path === "/" ? pathname === "/" : pathname.startsWith(path);
-
-  const handleLogout = async () => {
-    try {
-      await fetch("/api/logout", { method: "POST" });
-    } catch {
-      // ignore network errors; redirect regardless
-    }
-    setOpen(false);
-    router.replace("/login");
-    router.refresh();
-  };
 
   return (
     <>
@@ -102,14 +94,9 @@ export default function Navigation() {
             />
           ))}
         </nav>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className={`mt-auto ${logoutButtonClass}`}
-        >
-          <LogOut className="size-4 shrink-0" />
-          <span>Lock</span>
-        </button>
+        <div className="mt-auto border-t border-zinc-200 pt-3 dark:border-zinc-800">
+          <UserMenu username={username} avatarUrl={avatarUrl} />
+        </div>
       </aside>
 
       {/* Mobile top bar */}
@@ -136,14 +123,13 @@ export default function Navigation() {
                 onNavigate={() => setOpen(false)}
               />
             ))}
-            <button
-              type="button"
-              onClick={handleLogout}
-              className={logoutButtonClass}
-            >
-              <LogOut className="size-4 shrink-0" />
-              <span>Lock</span>
-            </button>
+            <div className="mt-1 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+              <UserMenu
+                username={username}
+                avatarUrl={avatarUrl}
+                onNavigate={() => setOpen(false)}
+              />
+            </div>
           </nav>
         )}
       </header>

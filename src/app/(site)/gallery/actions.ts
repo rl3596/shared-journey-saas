@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { isSupabaseConfigured } from "@/lib/supabase";
 import { updateAlbum } from "@/lib/data";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
@@ -16,9 +15,6 @@ export async function setAlbumCover(
   albumId: string,
   imageUrl: string,
 ): Promise<ActionResult> {
-  if (!isSupabaseConfigured) {
-    return { ok: false, error: "Supabase is not configured." };
-  }
   if (typeof albumId !== "string" || albumId.trim() === "") {
     return { ok: false, error: "Missing album id." };
   }
@@ -49,9 +45,6 @@ export async function togglePinAlbum(
   albumId: string,
   pin: boolean,
 ): Promise<ActionResult> {
-  if (!isSupabaseConfigured) {
-    return { ok: false, error: "Supabase is not configured." };
-  }
   if (typeof albumId !== "string" || albumId.trim() === "") {
     return { ok: false, error: "Missing album id." };
   }

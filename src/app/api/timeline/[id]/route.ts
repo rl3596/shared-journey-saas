@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isSupabaseConfigured } from "@/lib/supabase";
 import { uploadImage } from "@/lib/storage";
 import { updateTimelineEvent, deleteTimelineEvent } from "@/lib/data";
 
@@ -7,12 +6,6 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!isSupabaseConfigured) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase is not configured." },
-      { status: 503 },
-    );
-  }
   const { id } = await params;
 
   let form: FormData;
@@ -67,12 +60,6 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!isSupabaseConfigured) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase is not configured." },
-      { status: 503 },
-    );
-  }
   const { id } = await params;
 
   const ok = await deleteTimelineEvent(id);

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isSupabaseConfigured } from "@/lib/supabase";
 import { uploadImage } from "@/lib/storage";
 import {
   addImagesToAlbum,
@@ -13,12 +12,6 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!isSupabaseConfigured) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase is not configured." },
-      { status: 503 },
-    );
-  }
   const { id } = await params;
   const urls = await getAlbumPhotos(id);
   if (urls === null) {
@@ -35,12 +28,6 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!isSupabaseConfigured) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase is not configured." },
-      { status: 503 },
-    );
-  }
   const { id } = await params;
 
   let form: FormData;
@@ -87,12 +74,6 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!isSupabaseConfigured) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase is not configured." },
-      { status: 503 },
-    );
-  }
   const { id } = await params;
 
   let body: { urls?: unknown };

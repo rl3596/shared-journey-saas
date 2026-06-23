@@ -1,11 +1,14 @@
 import Navigation from "@/components/navigation";
 import { JourneyAdminProvider } from "@/components/journey-admin-context";
+import { getProfile } from "@/lib/profile";
 
-export default function SiteLayout({
+export default async function SiteLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const profile = await getProfile();
+
   return (
     <JourneyAdminProvider>
       {/* Sunset backdrop for Home, Gallery, and Schedule. Fixed so it
@@ -16,7 +19,10 @@ export default function SiteLayout({
         aria-hidden
         className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-b from-violet-300 via-rose-300 to-amber-200 dark:from-violet-900 dark:via-rose-900 dark:to-amber-900"
       />
-      <Navigation />
+      <Navigation
+        username={profile?.username ?? null}
+        avatarUrl={profile?.avatarUrl ?? null}
+      />
       <main className="md:ml-64">
         <div className="mx-auto max-w-6xl px-6 py-10">{children}</div>
       </main>
