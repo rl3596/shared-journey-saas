@@ -52,6 +52,14 @@ export default async function HomePage() {
   ]);
   const anniversaryDate = ctx?.space.anniversaryDate ?? null;
 
+  // Personal Easter egg: only accounts listed in SPECIAL_DESIGN_USER_IDS see
+  // the "First month special design" poster link.
+  const specialDesignUserIds = (process.env.SPECIAL_DESIGN_USER_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const showSpecialDesign = !!ctx && specialDesignUserIds.includes(ctx.user.id);
+
   // eslint-disable-next-line react-hooks/purity -- Server Component rendered per request; reading the current time here is intentional.
   const now = Date.now();
   const nextUp =
@@ -76,7 +84,7 @@ export default async function HomePage() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
             Home
           </h1>
-          <SpecialDesign />
+          {showSpecialDesign && <SpecialDesign />}
         </header>
 
         <AnniversaryCounter anniversaryDate={anniversaryDate} />
