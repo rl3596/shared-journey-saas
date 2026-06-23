@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  /* Playfair Display — romantic editorial serif for the Home cover. */
+  --font-serif: var(--font-playfair);
+
+  /* Soft fade-in used by the Our Journey perspective tabs (and free for reuse). */
+  --animate-fade-in: fade-in 220ms ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Drives the Daily Slideshow's bottom-edge progress bar (30 s per slide,
+   restarts whenever the div re-mounts via a React key change). Uses
+   transform: scaleX so the animation is GPU-accelerated and doesn't
+   trip Safari/Chrome's "can't animate from width: auto" gotcha. */
+@keyframes slideshow-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ---------- Home cover cinematic intro ----------
+   Five staggered keyframes that drive the entrance sequence on the Home
+   cover screen. All declared at root so the home-cover component can use
+   them via inline `animation` shorthands without needing Tailwind theme
+   tokens. */
+
+/* Image: fades up from full black with a tiny Ken-Burns zoom-out. */
+@keyframes cover-image-reveal {
+  from {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Soft darkening overlay: just an opacity fade once the photo has settled. */
+@keyframes cover-overlay-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* "Happy One Month" headline: scale-down + slide-up + letter-spacing
+   collapse — feels like the text is settling into place. */
+@keyframes cover-title-reveal {
+  0% {
+    opacity: 0;
+    transform: scale(1.08) translateY(18px);
+    letter-spacing: 0.08em;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    letter-spacing: 0;
+  }
+}
+
+/* "Welcome to our Secret House." subtitle: simple fade-up. */
+@keyframes cover-subtitle-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Bottom chevron + tap hint: longer slide-up so it feels like it's rising
+   into frame. The chevron's own bounce keeps running underneath. */
+@keyframes cover-hint-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+body {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
