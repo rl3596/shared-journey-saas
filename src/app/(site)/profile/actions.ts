@@ -2,10 +2,48 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { uploadImage } from "@/lib/storage";
 
 type Result = { ok: true } | { ok: false; error: string };
 
 const HANDLE_RE = /^[a-z0-9_]{3,30}$/;
+
+/**
+ * Upload a new avatar image (already HEIC-converted + resized on the client)
+ * to Storage, save its URL on the profile, and return the URL. The avatar
+ * updates everywhere immediately (sidebar card, etc.) via revalidation.
+ */
+export async function uploadAvatar(
+  formData: FormData,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not authenticated." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "No image provided." };
+  }
+
+  try {
+    const url = await uploadImage(file, "avatars");
+    const { error } = await supabase
+      .from("profiles")
+      .update({ avatar_url: url })
+      .eq("id", user.id);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/", "layout");
+    revalidatePath("/profile");
+    return { ok: true, url };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Upload failed.",
+    };
+  }
+}
 
 export async function updateProfile(input: {
   username: string;

@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Class-based dark mode so the Appearance theme toggle (next-themes,
+   attribute="class") can switch Light/Dark/System. `dark:` utilities now
+   respond to a `.dark` class on <html> instead of the OS media query. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);

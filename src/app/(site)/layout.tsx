@@ -3,16 +3,18 @@ import Navigation from "@/components/navigation";
 import { JourneyAdminProvider } from "@/components/journey-admin-context";
 import { getProfile, displayName } from "@/lib/profile";
 import { getSpaceContext, getUserSpaces } from "@/lib/space";
+import { getPendingInvitations } from "@/lib/invitations";
 
 export default async function SiteLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [profile, ctx, spaces] = await Promise.all([
+  const [profile, ctx, spaces, pending] = await Promise.all([
     getProfile(),
     getSpaceContext(),
     getUserSpaces(),
+    getPendingInvitations(),
   ]);
 
   // No session / no space → bounce to login (proxy normally handles this, but
@@ -35,6 +37,12 @@ export default async function SiteLayout({
         displayName={displayName(profile)}
         handle={profile?.handle ?? null}
         avatarUrl={profile?.avatarUrl ?? null}
+        invites={pending.map((p) => ({
+          id: p.id,
+          spaceName: p.spaceName,
+          inviterHandle: p.inviterHandle,
+          inviterName: p.inviterName,
+        }))}
       />
       <main className="md:ml-64">
         <div className="mx-auto max-w-6xl px-6 py-10">{children}</div>

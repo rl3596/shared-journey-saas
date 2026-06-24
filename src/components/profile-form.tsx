@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Check } from "lucide-react";
 import { updateProfile } from "@/app/(site)/profile/actions";
+import AvatarUpload from "@/components/avatar-upload";
 
 const inputClass =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-rose-400 focus:ring-2 focus:ring-rose-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:border-rose-500 dark:focus:ring-rose-900/50";
@@ -58,42 +59,20 @@ export default function ProfileForm({
     }
   };
 
-  const initials =
-    (form.firstName?.[0] ?? form.username?.[0] ?? "·").toUpperCase();
-
   return (
     <form
       onSubmit={onSubmit}
       className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
     >
-      {/* Avatar preview + URL */}
-      <div className="flex items-center gap-4">
-        <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rose-100 text-xl font-semibold text-rose-600 dark:bg-rose-950/50 dark:text-rose-300">
-          {form.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- arbitrary avatar URL
-            <img
-              src={form.avatarUrl}
-              alt=""
-              className="size-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          ) : (
-            initials
-          )}
-        </span>
-        <label className="block flex-1">
-          <span className={labelText}>Avatar URL</span>
-          <input
-            type="url"
-            value={form.avatarUrl}
-            onChange={(e) => set("avatarUrl", e.target.value)}
-            placeholder="https://…"
-            className={inputClass}
-          />
-        </label>
-      </div>
+      {/* Avatar — pick from your phone's photos */}
+      <AvatarUpload
+        value={form.avatarUrl}
+        fallbackName={form.firstName || form.username || "·"}
+        onChange={(url) => {
+          set("avatarUrl", url);
+          router.refresh(); // update the sidebar card immediately
+        }}
+      />
 
       <div className="mt-5 space-y-4">
         <label className="block">

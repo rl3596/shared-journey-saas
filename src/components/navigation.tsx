@@ -7,6 +7,7 @@ import { Menu, X } from "lucide-react";
 import { navRoutes, type NavRoute } from "@/config/navigation";
 import SpaceSwitcher from "@/components/space-switcher";
 import UserMenu from "@/components/user-menu";
+import NotificationBell, { type Invite } from "@/components/notification-bell";
 
 type SpaceItem = { id: string; name: string; role: string };
 
@@ -16,6 +17,7 @@ type NavProps = {
   displayName: string;
   handle: string | null;
   avatarUrl: string | null;
+  invites: Invite[];
 };
 
 function NavLink({
@@ -51,6 +53,7 @@ export default function Navigation({
   displayName,
   handle,
   avatarUrl,
+  invites,
 }: NavProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -62,7 +65,12 @@ export default function Navigation({
     <>
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-zinc-200 bg-white px-3 py-4 md:flex dark:border-zinc-800 dark:bg-zinc-950">
-        <SpaceSwitcher spaces={spaces} activeSpaceId={activeSpaceId} />
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <SpaceSwitcher spaces={spaces} activeSpaceId={activeSpaceId} />
+          </div>
+          <NotificationBell invites={invites} />
+        </div>
         <nav className="mt-6 flex flex-col gap-1 px-1">
           {navRoutes.map((route) => (
             <NavLink
@@ -87,6 +95,7 @@ export default function Navigation({
           <div className="min-w-0 flex-1">
             <SpaceSwitcher spaces={spaces} activeSpaceId={activeSpaceId} />
           </div>
+          <NotificationBell invites={invites} />
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}
