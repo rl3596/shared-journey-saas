@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { CalendarHeart, ArrowRight } from "lucide-react";
 import AnniversaryCounter from "@/components/anniversary-counter";
-import HomeCover from "@/components/home-cover";
 import DailySlideshow from "@/components/daily-slideshow";
 import SpecialDesign from "@/components/special-design";
 import { getScheduleEvents, getAllPhotos } from "@/lib/data";
@@ -78,7 +77,6 @@ export default async function HomePage() {
 
   return (
     <>
-      <HomeCover />
       <div className="space-y-6 lg:flex lg:h-[calc(100dvh-5rem)] lg:flex-col lg:gap-5 lg:space-y-0">
         <header>
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">

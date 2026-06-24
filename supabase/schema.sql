@@ -32,11 +32,34 @@ create table if not exists public.spaces (
 
 create table if not exists public.profiles (
   id          uuid primary key references auth.users (id) on delete cascade,
-  username    text,
+  username    text,                 -- display name
+  handle      text,                 -- @handle, unique; lowercase [a-z0-9_]{3,30}
+  first_name  text,
+  last_name   text,
+  location    text,
+  bio         text,
   avatar_url  text,
   created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+  updated_at  timestamptz not null default now(),
+  constraint profiles_handle_format
+    check (handle is null or handle ~ '^[a-z0-9_]{3,30}$')
 );
+create unique index if not exists profiles_handle_unique on public.profiles (handle);
+
+create table if not exists public.space_invitations (
+  id         uuid primary key default gen_random_uuid(),
+  space_id   uuid not null references public.spaces (id)  on delete cascade,
+  inviter_id uuid not null references auth.users (id)     on delete cascade,
+  invitee_id uuid not null references auth.users (id)     on delete cascade,
+  status     text not null default 'pending'
+             check (status in ('pending', 'accepted', 'declined')),
+  created_at timestamptz not null default now(),
+  unique (space_id, invitee_id)
+);
+create index if not exists space_invitations_invitee_idx
+  on public.space_invitations (invitee_id, status);
+create index if not exists space_invitations_space_idx
+  on public.space_invitations (space_id);
 
 create table if not exists public.space_members (
   space_id   uuid not null references public.spaces (id)     on delete cascade,
@@ -238,6 +261,81 @@ drop trigger if exists profiles_touch_updated_at on public.profiles;
 create trigger profiles_touch_updated_at
   before update on public.profiles
   for each row execute function public.touch_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- 7 · Invitations RLS + member-search / invite RPCs (Phase 2)
+-- ----------------------------------------------------------------------------
+
+alter table public.space_invitations enable row level security;
+
+create policy "invitations select" on public.space_invitations
+  for select using (invitee_id = auth.uid() or public.is_space_member(space_id));
+create policy "invitations insert" on public.space_invitations
+  for insert with check (inviter_id = auth.uid() and public.is_space_member(space_id));
+create policy "invitations delete" on public.space_invitations
+  for delete using (public.is_space_member(space_id));
+
+-- Exact handle/email lookup (no enumeration); reads auth.users via DEFINER.
+create or replace function public.search_profile(query text)
+returns table (id uuid, handle text, username text, first_name text, last_name text, avatar_url text)
+language sql stable security definer set search_path = public
+as $$
+  select p.id, p.handle, p.username, p.first_name, p.last_name, p.avatar_url
+    from public.profiles p
+    join auth.users u on u.id = p.id
+   where btrim(coalesce(query, '')) <> ''
+     and (p.handle = lower(btrim(query)) or lower(u.email) = lower(btrim(query)))
+   limit 5;
+$$;
+revoke all on function public.search_profile(text) from public, anon;
+grant execute on function public.search_profile(text) to authenticated;
+
+-- Enriched pending invitations for the current user (space/inviter names).
+create or replace function public.get_pending_invitations()
+returns table (id uuid, space_id uuid, space_name text, inviter_id uuid,
+               inviter_handle text, inviter_name text, created_at timestamptz)
+language sql stable security definer set search_path = public
+as $$
+  select i.id, i.space_id, s.name, i.inviter_id, ip.handle,
+         coalesce(nullif(btrim(coalesce(ip.first_name,'') || ' ' || coalesce(ip.last_name,'')), ''), ip.username),
+         i.created_at
+    from public.space_invitations i
+    join public.spaces s on s.id = i.space_id
+    left join public.profiles ip on ip.id = i.inviter_id
+   where i.invitee_id = auth.uid() and i.status = 'pending'
+   order by i.created_at desc;
+$$;
+revoke all on function public.get_pending_invitations() from public, anon;
+grant execute on function public.get_pending_invitations() to authenticated;
+
+-- Accept inserts the membership here (DEFINER) so space_members stays locked.
+create or replace function public.accept_invitation(invitation_id uuid)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare inv public.space_invitations;
+begin
+  select * into inv from public.space_invitations
+   where id = invitation_id and invitee_id = auth.uid() and status = 'pending';
+  if not found then raise exception 'Invitation not found or not pending'; end if;
+  insert into public.space_members (space_id, user_id, role)
+  values (inv.space_id, auth.uid(), 'member')
+  on conflict (space_id, user_id) do nothing;
+  update public.space_invitations set status = 'accepted' where id = invitation_id;
+end;
+$$;
+revoke all on function public.accept_invitation(uuid) from public, anon;
+grant execute on function public.accept_invitation(uuid) to authenticated;
+
+create or replace function public.decline_invitation(invitation_id uuid)
+returns void language plpgsql security definer set search_path = public
+as $$
+begin
+  update public.space_invitations set status = 'declined'
+   where id = invitation_id and invitee_id = auth.uid() and status = 'pending';
+end;
+$$;
+revoke all on function public.decline_invitation(uuid) from public, anon;
+grant execute on function public.decline_invitation(uuid) to authenticated;
 
 -- ============================================================================
 -- Follow-ups handled in later phases (not in this file):
