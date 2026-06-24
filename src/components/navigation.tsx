@@ -2,43 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRef, useState } from "react";
-import { Heart, Menu, X } from "lucide-react";
+import { useState } from "react";
+import { Menu, X } from "lucide-react";
 import { navRoutes, type NavRoute } from "@/config/navigation";
-import { useJourneyAdmin } from "@/components/journey-admin-context";
+import SpaceSwitcher from "@/components/space-switcher";
 import UserMenu from "@/components/user-menu";
 
-function Brand() {
-  const { isJourneyAdmin, toggleJourneyAdmin, showToast } = useJourneyAdmin();
-  // Secret trigger: 5 clicks within 3 seconds toggles Journey Admin Mode.
-  const clicksRef = useRef<number[]>([]);
+type SpaceItem = { id: string; name: string; role: string };
 
-  const handleClick = () => {
-    const now = Date.now();
-    clicksRef.current = clicksRef.current.filter((t) => now - t < 3000);
-    clicksRef.current.push(now);
-    if (clicksRef.current.length >= 5) {
-      clicksRef.current = [];
-      const willBeAdmin = !isJourneyAdmin;
-      toggleJourneyAdmin();
-      showToast(
-        `Journey Admin Mode: ${willBeAdmin ? "Activated" : "Deactivated"}`,
-      );
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      aria-label="Us"
-      className="flex cursor-pointer items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
-    >
-      <Heart className="size-5 text-rose-500" fill="currentColor" />
-      <span>Us</span>
-    </button>
-  );
-}
+type NavProps = {
+  spaces: SpaceItem[];
+  activeSpaceId: string;
+  displayName: string;
+  handle: string | null;
+  avatarUrl: string | null;
+};
 
 function NavLink({
   route,
@@ -68,12 +46,12 @@ function NavLink({
 }
 
 export default function Navigation({
-  username,
+  spaces,
+  activeSpaceId,
+  displayName,
+  handle,
   avatarUrl,
-}: {
-  username: string | null;
-  avatarUrl: string | null;
-}) {
+}: NavProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -83,9 +61,9 @@ export default function Navigation({
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-zinc-200 bg-white px-4 py-6 md:flex dark:border-zinc-800 dark:bg-zinc-950">
-        <Brand />
-        <nav className="mt-8 flex flex-col gap-1">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-zinc-200 bg-white px-3 py-4 md:flex dark:border-zinc-800 dark:bg-zinc-950">
+        <SpaceSwitcher spaces={spaces} activeSpaceId={activeSpaceId} />
+        <nav className="mt-6 flex flex-col gap-1 px-1">
           {navRoutes.map((route) => (
             <NavLink
               key={route.path}
@@ -94,27 +72,33 @@ export default function Navigation({
             />
           ))}
         </nav>
-        <div className="mt-auto border-t border-zinc-200 pt-3 dark:border-zinc-800">
-          <UserMenu username={username} avatarUrl={avatarUrl} />
+        <div className="mt-auto border-t border-zinc-200 pt-2 dark:border-zinc-800">
+          <UserMenu
+            displayName={displayName}
+            handle={handle}
+            avatarUrl={avatarUrl}
+          />
         </div>
       </aside>
 
       {/* Mobile top bar */}
       <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur md:hidden dark:border-zinc-800 dark:bg-zinc-950/90">
-        <div className="flex items-center justify-between px-4 py-3">
-          <Brand />
+        <div className="flex items-center gap-2 px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <SpaceSwitcher spaces={spaces} activeSpaceId={activeSpaceId} />
+          </div>
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}
             aria-label="Toggle navigation menu"
             aria-expanded={open}
-            className="rounded-lg p-2 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="shrink-0 rounded-lg p-2 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
             {open ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </div>
         {open && (
-          <nav className="flex flex-col gap-1 px-4 pb-3">
+          <nav className="flex flex-col gap-1 px-3 pb-3">
             {navRoutes.map((route) => (
               <NavLink
                 key={route.path}
@@ -125,7 +109,8 @@ export default function Navigation({
             ))}
             <div className="mt-1 border-t border-zinc-200 pt-2 dark:border-zinc-800">
               <UserMenu
-                username={username}
+                displayName={displayName}
+                handle={handle}
                 avatarUrl={avatarUrl}
                 onNavigate={() => setOpen(false)}
               />

@@ -1,13 +1,23 @@
+import { redirect } from "next/navigation";
 import Navigation from "@/components/navigation";
 import { JourneyAdminProvider } from "@/components/journey-admin-context";
-import { getProfile } from "@/lib/profile";
+import { getProfile, displayName } from "@/lib/profile";
+import { getSpaceContext, getUserSpaces } from "@/lib/space";
 
 export default async function SiteLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const profile = await getProfile();
+  const [profile, ctx, spaces] = await Promise.all([
+    getProfile(),
+    getSpaceContext(),
+    getUserSpaces(),
+  ]);
+
+  // No session / no space → bounce to login (proxy normally handles this, but
+  // this guards the case where memberships can't be read).
+  if (!ctx) redirect("/login");
 
   return (
     <JourneyAdminProvider>
@@ -20,7 +30,10 @@ export default async function SiteLayout({
         className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-b from-violet-300 via-rose-300 to-amber-200 dark:from-violet-900 dark:via-rose-900 dark:to-amber-900"
       />
       <Navigation
-        username={profile?.username ?? null}
+        spaces={spaces}
+        activeSpaceId={ctx.spaceId}
+        displayName={displayName(profile)}
+        handle={profile?.handle ?? null}
         avatarUrl={profile?.avatarUrl ?? null}
       />
       <main className="md:ml-64">

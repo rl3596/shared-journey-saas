@@ -3,18 +3,18 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { User, Settings, LogOut, ChevronUp } from "lucide-react";
+import { User, Settings, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
-  username: string | null;
+  displayName: string;
+  handle: string | null;
   avatarUrl: string | null;
   /** Called after navigating (lets the mobile menu close itself). */
   onNavigate?: () => void;
 };
 
-function initials(name: string | null): string {
-  if (!name) return "·";
+function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   const first = parts[0]?.[0] ?? "";
   const second = parts[1]?.[0] ?? "";
@@ -24,7 +24,12 @@ function initials(name: string | null): string {
 const itemClass =
   "flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm text-zinc-700 outline-none transition-colors data-[highlighted]:bg-zinc-100 dark:text-zinc-200 dark:data-[highlighted]:bg-zinc-800";
 
-export default function UserMenu({ username, avatarUrl, onNavigate }: Props) {
+export default function UserMenu({
+  displayName,
+  handle,
+  avatarUrl,
+  onNavigate,
+}: Props) {
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
 
@@ -51,11 +56,11 @@ export default function UserMenu({ username, avatarUrl, onNavigate }: Props) {
         <button
           type="button"
           aria-label="Account menu"
-          className="flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
         >
-          <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rose-100 text-sm font-semibold text-rose-600 dark:bg-rose-950/50 dark:text-rose-300">
+          <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rose-100 text-sm font-semibold text-rose-600 dark:bg-rose-950/50 dark:text-rose-300">
             {avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- user avatar from Supabase Storage / arbitrary URL
+              // eslint-disable-next-line @next/next/no-img-element -- user avatar from an arbitrary URL
               <img
                 src={avatarUrl}
                 alt=""
@@ -65,13 +70,19 @@ export default function UserMenu({ username, avatarUrl, onNavigate }: Props) {
                 }}
               />
             ) : (
-              initials(username)
+              initials(displayName)
             )}
           </span>
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
-            {username ?? "Account"}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
+              {displayName}
+            </span>
+            {handle && (
+              <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
+                @{handle}
+              </span>
+            )}
           </span>
-          <ChevronUp className="size-4 shrink-0 text-zinc-400" />
         </button>
       </DropdownMenu.Trigger>
 
@@ -80,9 +91,9 @@ export default function UserMenu({ username, avatarUrl, onNavigate }: Props) {
           side="top"
           align="start"
           sideOffset={8}
-          className="z-50 w-[--radix-dropdown-menu-trigger-width] min-w-52 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900"
+          className="z-50 min-w-56 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900"
         >
-          <DropdownMenu.Item className={itemClass} onSelect={() => go("/settings")}>
+          <DropdownMenu.Item className={itemClass} onSelect={() => go("/profile")}>
             <User className="size-4 shrink-0 text-zinc-400" />
             Profile
           </DropdownMenu.Item>
