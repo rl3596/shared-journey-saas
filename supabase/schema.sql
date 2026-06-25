@@ -157,16 +157,32 @@ create table if not exists public.albums (
 create index if not exists albums_space_idx on public.albums (space_id);
 
 create table if not exists public.schedule_events (
-  id         text primary key default gen_random_uuid()::text,
-  space_id   uuid not null references public.spaces (id) on delete cascade,
-  owner      text not null,          -- space-specific member label (no hard CHECK)
-  title      text not null,
-  date       text not null,          -- YYYY-MM-DD
-  time       text not null default '', -- HH:MM (24h)
-  notes      text not null default '',
-  created_at timestamptz not null default now()
+  id              text primary key default gen_random_uuid()::text,
+  space_id        uuid not null references public.spaces (id) on delete cascade,
+  creator_id      uuid references auth.users (id) on delete cascade, -- whose event
+  participant_ids uuid[] not null default '{}',  -- other members (non-empty = joint)
+  owner           text,               -- legacy label (unused)
+  title           text not null,
+  date            text not null,          -- YYYY-MM-DD
+  time            text not null default '', -- HH:MM (24h)
+  notes           text not null default '',
+  created_at      timestamptz not null default now()
 );
 create index if not exists schedule_events_space_idx on public.schedule_events (space_id);
+create index if not exists schedule_events_creator_idx on public.schedule_events (creator_id);
+
+-- Auto-stamp the creator so "create only as yourself" can't be spoofed.
+create or replace function public.set_schedule_creator()
+returns trigger language plpgsql as $$
+begin
+  if new.creator_id is null then new.creator_id := auth.uid(); end if;
+  return new;
+end;
+$$;
+drop trigger if exists schedule_set_creator on public.schedule_events;
+create trigger schedule_set_creator
+  before insert on public.schedule_events
+  for each row execute function public.set_schedule_creator();
 
 -- Atomic append for albums.image_urls (race-free concurrent photo uploads).
 -- SECURITY INVOKER (default): RLS still applies, so a caller can only append
@@ -232,9 +248,15 @@ create policy "albums member all" on public.albums
   for all using (public.is_space_member(space_id))
           with check (public.is_space_member(space_id));
 
-create policy "schedule member all" on public.schedule_events
-  for all using (public.is_space_member(space_id))
-          with check (public.is_space_member(space_id));
+-- schedule: members read all; create as yourself; edit/delete only your own.
+create policy "schedule select" on public.schedule_events
+  for select using (public.is_space_member(space_id));
+create policy "schedule insert own" on public.schedule_events
+  for insert with check (creator_id = auth.uid() and public.is_space_member(space_id));
+create policy "schedule update own" on public.schedule_events
+  for update using (creator_id = auth.uid()) with check (creator_id = auth.uid());
+create policy "schedule delete own" on public.schedule_events
+  for delete using (creator_id = auth.uid());
 
 -- ----------------------------------------------------------------------------
 -- 5 · Auto-provision profile + default space on signup
