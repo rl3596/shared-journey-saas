@@ -1,4 +1,5 @@
 import LoveJourneyTimeline from "@/components/love-journey-timeline";
+import JourneyEditToggle from "@/components/journey-edit-toggle";
 import { getTimelineEvents } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
@@ -23,11 +24,14 @@ export default async function LoveJourneyPage() {
         className="pointer-events-none fixed inset-0 -z-10 bg-white/60 dark:bg-zinc-950/70"
       />
       <section className="space-y-8">
-        <header className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">Our Journey</h1>
-          <p className="text-zinc-700 dark:text-zinc-300">
-            The milestones that brought us here — scroll through our story.
-          </p>
+        <header className="flex items-start justify-between gap-4">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight">Our Journey</h1>
+            <p className="text-zinc-700 dark:text-zinc-300">
+              The milestones that brought us here — scroll through our story.
+            </p>
+          </div>
+          <JourneyEditToggle />
         </header>
         <LoveJourneyTimeline events={events} />
       </section>
