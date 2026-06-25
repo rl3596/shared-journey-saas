@@ -1,6 +1,9 @@
+import { redirect } from "next/navigation";
 import LoveJourneyTimeline from "@/components/love-journey-timeline";
 import JourneyEditToggle from "@/components/journey-edit-toggle";
 import { getTimelineEvents } from "@/lib/data";
+import { getSpaceContext } from "@/lib/space";
+import { getProfile, displayName } from "@/lib/profile";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +11,19 @@ const BACKGROUND_URL =
   "https://yyxfjcgqhttcjkfzwbvm.supabase.co/storage/v1/object/public/gallery/backgrounds/Our_Journey_bg.jpeg";
 
 export default async function LoveJourneyPage() {
-  const events = await getTimelineEvents();
+  const ctx = await getSpaceContext();
+  if (!ctx) redirect("/login");
+  const [events, profile, ownerRow] = await Promise.all([
+    getTimelineEvents(),
+    getProfile(),
+    ctx.supabase
+      .from("space_members")
+      .select("user_id")
+      .eq("space_id", ctx.spaceId)
+      .eq("role", "owner")
+      .maybeSingle(),
+  ]);
+  const ownerId = (ownerRow.data?.user_id as string) ?? null;
 
   return (
     <>
@@ -33,7 +48,13 @@ export default async function LoveJourneyPage() {
           </div>
           <JourneyEditToggle />
         </header>
-        <LoveJourneyTimeline events={events} />
+        <LoveJourneyTimeline
+          events={events}
+          currentUserId={ctx.user.id}
+          ownerId={ownerId}
+          currentUserName={displayName(profile)}
+          isOwner={ctx.user.id === ownerId}
+        />
       </section>
     </>
   );

@@ -20,8 +20,6 @@ export async function PATCH(
 
   const date = String(form.get("date") ?? "").trim();
   const title = String(form.get("title") ?? "").trim();
-  const contentRui = String(form.get("content_rui") ?? "").trim();
-  const contentWanyun = String(form.get("content_wanyun") ?? "").trim();
   const location = String(form.get("location") ?? "").trim();
   const cover = form.get("cover");
   const coverFile = cover instanceof File && cover.size > 0 ? cover : null;
@@ -38,8 +36,6 @@ export async function PATCH(
     const ok = await updateTimelineEvent(id, {
       date,
       title,
-      contentRui,
-      contentWanyun,
       location,
       ...(image !== undefined ? { image } : {}),
     });

@@ -2,11 +2,28 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { getSpaceContext } from "@/lib/space";
 import { deleteImagesByUrl } from "./storage";
-import type { TimelineEvent } from "@/data/love-journey";
+import type { TimelineEvent, TimelineComment } from "@/data/love-journey";
 import type { Album, AlbumSummary } from "@/data/gallery";
 import type { EventOwner, ScheduleEvent } from "@/data/schedule";
 
-export type { TimelineEvent, Album, AlbumSummary, ScheduleEvent, EventOwner };
+export type {
+  TimelineEvent,
+  TimelineComment,
+  Album,
+  AlbumSummary,
+  ScheduleEvent,
+  EventOwner,
+};
+
+function profileName(p: {
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  handle?: string | null;
+}): string {
+  const full = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+  return full || p.username || (p.handle ? `@${p.handle}` : "Member");
+}
 
 // Migrated rows may carry legacy owner labels; normalize for display.
 function normalizeOwner(owner: string): EventOwner {
@@ -29,7 +46,7 @@ export async function getTimelineEvents(): Promise<TimelineEvent[]> {
 
   const { data, error } = await ctx.supabase
     .from("timeline_events")
-    .select("id,date,title,content_rui,content_wanyun,location,image")
+    .select("id,date,title,location,image")
     .eq("space_id", ctx.spaceId);
 
   if (error || !data) {
@@ -37,41 +54,71 @@ export async function getTimelineEvents(): Promise<TimelineEvent[]> {
     return [];
   }
 
+  // Comments for all of the space's milestones (one query), plus the author
+  // display names (a second query — RLS now lets co-members read profiles).
+  const { data: commentRows } = await ctx.supabase
+    .from("timeline_comments")
+    .select("id,event_id,author_id,content")
+    .eq("space_id", ctx.spaceId)
+    .order("created_at", { ascending: true });
+
+  const authorIds = [...new Set((commentRows ?? []).map((c) => c.author_id))];
+  const nameById = new Map<string, string>();
+  if (authorIds.length > 0) {
+    const { data: profs } = await ctx.supabase
+      .from("profiles")
+      .select("id,username,first_name,last_name,handle")
+      .in("id", authorIds);
+    for (const p of profs ?? []) nameById.set(p.id, profileName(p));
+  }
+
+  const commentsByEvent = new Map<string, TimelineComment[]>();
+  for (const c of commentRows ?? []) {
+    const list = commentsByEvent.get(c.event_id) ?? [];
+    list.push({
+      id: c.id,
+      authorId: c.author_id,
+      authorName: nameById.get(c.author_id) ?? "Member",
+      content: c.content ?? "",
+    });
+    commentsByEvent.set(c.event_id, list);
+  }
+
   const events: TimelineEvent[] = data.map((row) => ({
     id: row.id,
     date: row.date,
     title: row.title,
-    contentRui: row.content_rui ?? "",
-    contentWanyun: row.content_wanyun ?? "",
     location: row.location,
     image: row.image ?? undefined,
+    comments: commentsByEvent.get(row.id) ?? [],
   }));
   events.sort((a, b) => parsedTime(a.date) - parsedTime(b.date));
   return events;
 }
 
-export async function createTimelineEvent(
-  input: Omit<TimelineEvent, "id">,
-): Promise<TimelineEvent | null> {
+export async function createTimelineEvent(input: {
+  date: string;
+  title: string;
+  location: string;
+  image?: string;
+}): Promise<{ id: string } | null> {
   const ctx = await getSpaceContext();
   if (!ctx) throw new Error("Not authenticated.");
 
-  const event: TimelineEvent = { id: randomUUID(), ...input };
+  const id = randomUUID();
   const { error } = await ctx.supabase.from("timeline_events").insert({
-    id: event.id,
+    id,
     space_id: ctx.spaceId,
-    date: event.date,
-    title: event.title,
-    content_rui: event.contentRui,
-    content_wanyun: event.contentWanyun,
-    location: event.location,
-    image: event.image ?? null,
+    date: input.date,
+    title: input.title,
+    location: input.location,
+    image: input.image ?? null,
   });
   if (error) {
     console.error("[data] createTimelineEvent:", error.message);
     throw new Error(error.message);
   }
-  return event;
+  return { id };
 }
 
 export async function updateTimelineEvent(
@@ -79,8 +126,6 @@ export async function updateTimelineEvent(
   fields: {
     date: string;
     title: string;
-    contentRui: string;
-    contentWanyun: string;
     location: string;
     image?: string; // pass only when a new cover was uploaded
   },
@@ -98,8 +143,6 @@ export async function updateTimelineEvent(
   const patch: Record<string, unknown> = {
     date: fields.date,
     title: fields.title,
-    content_rui: fields.contentRui,
-    content_wanyun: fields.contentWanyun,
     location: fields.location,
   };
   if (fields.image !== undefined) patch.image = fields.image;
@@ -115,6 +158,64 @@ export async function updateTimelineEvent(
 
   if (fields.image !== undefined && oldImage && oldImage !== fields.image) {
     await deleteImagesByUrl([oldImage]);
+  }
+  return true;
+}
+
+// ---------- Timeline comments (per member) ----------
+
+/** Add the current user's comment to a milestone (one per person, enforced by
+ * a unique constraint + RLS). */
+export async function addTimelineComment(
+  eventId: string,
+  content: string,
+): Promise<boolean> {
+  const ctx = await getSpaceContext();
+  if (!ctx) throw new Error("Not authenticated.");
+  const { error } = await ctx.supabase.from("timeline_comments").insert({
+    event_id: eventId,
+    space_id: ctx.spaceId,
+    author_id: ctx.user.id,
+    content,
+  });
+  if (error) {
+    console.error("[data] addTimelineComment:", error.message);
+    throw new Error(error.message);
+  }
+  return true;
+}
+
+/** Edit your own comment (RLS blocks editing anyone else's). */
+export async function updateTimelineComment(
+  commentId: string,
+  content: string,
+): Promise<boolean> {
+  const ctx = await getSpaceContext();
+  if (!ctx) throw new Error("Not authenticated.");
+  const { error } = await ctx.supabase
+    .from("timeline_comments")
+    .update({ content })
+    .eq("id", commentId);
+  if (error) {
+    console.error("[data] updateTimelineComment:", error.message);
+    throw new Error(error.message);
+  }
+  return true;
+}
+
+/** Delete your own comment (RLS blocks others' and the space owner's). */
+export async function deleteTimelineComment(
+  commentId: string,
+): Promise<boolean> {
+  const ctx = await getSpaceContext();
+  if (!ctx) throw new Error("Not authenticated.");
+  const { error } = await ctx.supabase
+    .from("timeline_comments")
+    .delete()
+    .eq("id", commentId);
+  if (error) {
+    console.error("[data] deleteTimelineComment:", error.message);
+    throw new Error(error.message);
   }
   return true;
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { uploadImage } from "@/lib/storage";
-import { createTimelineEvent } from "@/lib/data";
+import { createTimelineEvent, addTimelineComment } from "@/lib/data";
 
 export async function POST(request: Request) {
   let form: FormData;
@@ -15,9 +15,8 @@ export async function POST(request: Request) {
 
   const date = String(form.get("date") ?? "").trim();
   const title = String(form.get("title") ?? "").trim();
-  const contentRui = String(form.get("content_rui") ?? "").trim();
-  const contentWanyun = String(form.get("content_wanyun") ?? "").trim();
   const location = String(form.get("location") ?? "").trim();
+  const comment = String(form.get("comment") ?? "").trim();
   const cover = form.get("cover");
   const coverFile = cover instanceof File && cover.size > 0 ? cover : null;
 
@@ -30,20 +29,16 @@ export async function POST(request: Request) {
 
   try {
     const image = coverFile ? await uploadImage(coverFile, "timeline") : undefined;
-    const event = await createTimelineEvent({
-      date,
-      title,
-      contentRui,
-      contentWanyun,
-      location,
-      image,
-    });
+    const event = await createTimelineEvent({ date, title, location, image });
     if (!event) {
       return NextResponse.json(
         { ok: false, error: "Could not create milestone." },
         { status: 500 },
       );
     }
+    // Seed the creator's (owner's) comment so the milestone starts with one
+    // comment box bearing their name.
+    await addTimelineComment(event.id, comment);
     return NextResponse.json({ ok: true, event });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Upload failed";
