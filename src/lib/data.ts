@@ -4,7 +4,7 @@ import { getSpaceContext } from "@/lib/space";
 import { deleteImagesByUrl } from "./storage";
 import type { TimelineEvent, TimelineComment } from "@/data/love-journey";
 import type { Album, AlbumSummary } from "@/data/gallery";
-import type { EventOwner, ScheduleEvent } from "@/data/schedule";
+import type { ScheduleEvent } from "@/data/schedule";
 
 export type {
   TimelineEvent,
@@ -12,7 +12,6 @@ export type {
   Album,
   AlbumSummary,
   ScheduleEvent,
-  EventOwner,
 };
 
 function profileName(p: {
@@ -23,13 +22,6 @@ function profileName(p: {
 }): string {
   const full = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
   return full || p.username || (p.handle ? `@${p.handle}` : "Member");
-}
-
-// Migrated rows may carry legacy owner labels; normalize for display.
-function normalizeOwner(owner: string): EventOwner {
-  if (owner === "Me") return "Rui";
-  if (owner === "Her") return "Wanyun";
-  return owner as EventOwner;
 }
 
 // Parse a (possibly free-form) date like "August 19, 2024" or "2024-08-19".
@@ -483,7 +475,7 @@ export async function getScheduleEvents(): Promise<ScheduleEvent[]> {
 
   const { data, error } = await ctx.supabase
     .from("schedule_events")
-    .select("id,owner,title,date,time,notes")
+    .select("id,creator_id,participant_ids,title,date,time,notes")
     .eq("space_id", ctx.spaceId)
     .order("date", { ascending: true })
     .order("time", { ascending: true });
@@ -493,60 +485,87 @@ export async function getScheduleEvents(): Promise<ScheduleEvent[]> {
     return [];
   }
 
+  // Resolve creator + participant display names in one profiles query.
+  const ids = new Set<string>();
+  for (const r of data) {
+    if (r.creator_id) ids.add(r.creator_id);
+    for (const p of (r.participant_ids ?? []) as string[]) ids.add(p);
+  }
+  const nameById = new Map<string, string>();
+  if (ids.size > 0) {
+    const { data: profs } = await ctx.supabase
+      .from("profiles")
+      .select("id,username,first_name,last_name,handle")
+      .in("id", [...ids]);
+    for (const p of profs ?? []) nameById.set(p.id, profileName(p));
+  }
+
   return data
-    .map((row) => ({
-      id: row.id,
-      owner: normalizeOwner(row.owner),
-      title: row.title,
-      date: row.date,
-      time: row.time,
-      notes: row.notes ?? "",
-    }))
+    .map((row) => {
+      const participantIds = (row.participant_ids ?? []) as string[];
+      return {
+        id: row.id,
+        creatorId: row.creator_id ?? "",
+        creatorName: nameById.get(row.creator_id) ?? "Member",
+        participantIds,
+        participantNames: participantIds.map((p) => nameById.get(p) ?? "Member"),
+        isJoint: participantIds.length > 0,
+        title: row.title,
+        date: row.date,
+        time: row.time,
+        notes: row.notes ?? "",
+      };
+    })
     .filter(isUpcoming);
 }
 
-export async function addScheduleEvent(
-  input: Omit<ScheduleEvent, "id">,
-): Promise<ScheduleEvent | null> {
+export async function addScheduleEvent(input: {
+  title: string;
+  date: string;
+  time: string;
+  notes: string;
+  participantIds: string[];
+}): Promise<boolean> {
   const ctx = await getSpaceContext();
   if (!ctx) throw new Error("Not authenticated.");
 
-  const event: ScheduleEvent = { id: randomUUID(), ...input };
   const { error } = await ctx.supabase.from("schedule_events").insert({
-    id: event.id,
+    id: randomUUID(),
     space_id: ctx.spaceId,
-    owner: event.owner,
-    title: event.title,
-    date: event.date,
-    time: event.time,
-    notes: event.notes,
+    creator_id: ctx.user.id,
+    participant_ids: input.participantIds,
+    title: input.title,
+    date: input.date,
+    time: input.time,
+    notes: input.notes,
   });
   if (error) {
     console.error("[data] insert schedule_event:", error.message);
-    return null;
+    throw new Error(error.message);
   }
-  return event;
+  return true;
 }
 
 export async function updateScheduleEvent(
   id: string,
   fields: {
-    owner?: EventOwner;
     title?: string;
     date?: string;
     time?: string;
     notes?: string;
+    participantIds?: string[];
   },
 ): Promise<boolean> {
   const ctx = await getSpaceContext();
   if (!ctx) throw new Error("Not authenticated.");
 
   const patch: Record<string, unknown> = {};
-  if (fields.owner !== undefined) patch.owner = fields.owner;
   if (fields.title !== undefined) patch.title = fields.title;
   if (fields.date !== undefined) patch.date = fields.date;
   if (fields.time !== undefined) patch.time = fields.time;
   if (fields.notes !== undefined) patch.notes = fields.notes;
+  if (fields.participantIds !== undefined)
+    patch.participant_ids = fields.participantIds;
   if (Object.keys(patch).length === 0) return true;
 
   const { error } = await ctx.supabase
@@ -555,7 +574,7 @@ export async function updateScheduleEvent(
     .eq("id", id);
   if (error) {
     console.error("[data] updateScheduleEvent:", error.message);
-    return false;
+    throw new Error(error.message);
   }
   return true;
 }
@@ -573,4 +592,30 @@ export async function deleteScheduleEvent(id: string): Promise<boolean> {
     return false;
   }
   return true;
+}
+
+// ---------- Members ----------
+
+export type SpaceMember = { id: string; name: string };
+
+/** Other members of the active space (excludes the current user) — for the
+ * joint-event member picker. */
+export async function getOtherSpaceMembers(): Promise<SpaceMember[]> {
+  const ctx = await getSpaceContext();
+  if (!ctx) return [];
+
+  const { data: members } = await ctx.supabase
+    .from("space_members")
+    .select("user_id")
+    .eq("space_id", ctx.spaceId);
+  const others = (members ?? [])
+    .map((m) => m.user_id as string)
+    .filter((id) => id !== ctx.user.id);
+  if (others.length === 0) return [];
+
+  const { data: profs } = await ctx.supabase
+    .from("profiles")
+    .select("id,username,first_name,last_name,handle")
+    .in("id", others);
+  return (profs ?? []).map((p) => ({ id: p.id, name: profileName(p) }));
 }

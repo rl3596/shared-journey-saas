@@ -52,9 +52,9 @@ export default async function HomePage() {
 
   // eslint-disable-next-line react-hooks/purity -- Server Component rendered per request; reading the current time here is intentional.
   const now = Date.now();
+  // Soonest upcoming event across everyone in the space.
   const nextUp =
     schedule
-      .filter((e) => e.owner === "Joint")
       .map((e) => ({
         event: e,
         ts: new Date(`${e.date}T${e.time || "00:00"}`).getTime(),
@@ -105,7 +105,7 @@ export default async function HomePage() {
               </div>
             ) : (
               <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
-                No upcoming plans for the two of you yet.
+                No upcoming plans yet.
               </p>
             )}
 
