@@ -93,6 +93,29 @@ as $$
   );
 $$;
 
+-- Is `target_user` the OWNER of the space? (used by milestone + comment RLS)
+create or replace function public.is_space_owner(target_space_id uuid, target_user uuid)
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.space_members m
+     where m.space_id = target_space_id and m.user_id = target_user
+       and m.role = 'owner'
+  );
+$$;
+
+-- Does the current user share any space with `other`? (lets co-members read
+-- each other's profiles for names/avatars).
+create or replace function public.shares_space_with(other uuid)
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.space_members a
+      join public.space_members b on a.space_id = b.space_id
+     where a.user_id = auth.uid() and b.user_id = other
+  );
+$$;
+
 -- ----------------------------------------------------------------------------
 -- 3 · Content tables (every row scoped by space_id)
 -- ----------------------------------------------------------------------------
@@ -175,6 +198,9 @@ create policy "profiles self insert" on public.profiles
   for insert with check (id = auth.uid());
 create policy "profiles self update" on public.profiles
   for update using (id = auth.uid()) with check (id = auth.uid());
+-- Co-members can read each other's profiles (names/avatars on comments etc.).
+create policy "profiles shared-space select" on public.profiles
+  for select using (public.shares_space_with(id));
 
 -- spaces — members may read & update; creation happens only via the signup
 -- trigger (SECURITY DEFINER), so no INSERT policy is exposed in Phase 1.
@@ -189,12 +215,19 @@ create policy "spaces member update" on public.spaces
 create policy "space_members member select" on public.space_members
   for select using (public.is_space_member(space_id));
 
--- content tables — full CRUD for members of the row's space. FOR ALL covers
--- SELECT / INSERT / UPDATE / DELETE with one policy each.
-create policy "timeline member all" on public.timeline_events
-  for all using (public.is_space_member(space_id))
-          with check (public.is_space_member(space_id));
+-- Milestones: readable by members, but only the OWNER can create/edit/delete
+-- (members contribute per-milestone comments instead — see timeline_comments).
+create policy "timeline select" on public.timeline_events
+  for select using (public.is_space_member(space_id));
+create policy "timeline owner insert" on public.timeline_events
+  for insert with check (public.is_space_owner(space_id, auth.uid()));
+create policy "timeline owner update" on public.timeline_events
+  for update using (public.is_space_owner(space_id, auth.uid()))
+              with check (public.is_space_owner(space_id, auth.uid()));
+create policy "timeline owner delete" on public.timeline_events
+  for delete using (public.is_space_owner(space_id, auth.uid()));
 
+-- other content tables — full CRUD for members of the row's space.
 create policy "albums member all" on public.albums
   for all using (public.is_space_member(space_id))
           with check (public.is_space_member(space_id));
@@ -336,6 +369,41 @@ end;
 $$;
 revoke all on function public.decline_invitation(uuid) from public, anon;
 grant execute on function public.decline_invitation(uuid) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 8 · Per-member journey comments (Phase 2)
+-- ----------------------------------------------------------------------------
+create table if not exists public.timeline_comments (
+  id         uuid primary key default gen_random_uuid(),
+  event_id   text not null references public.timeline_events (id) on delete cascade,
+  space_id   uuid not null references public.spaces (id)          on delete cascade,
+  author_id  uuid not null references auth.users (id)             on delete cascade,
+  content    text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (event_id, author_id)
+);
+create index if not exists timeline_comments_event_idx on public.timeline_comments (event_id);
+create index if not exists timeline_comments_space_idx on public.timeline_comments (space_id);
+
+alter table public.timeline_comments enable row level security;
+
+create policy "comments select" on public.timeline_comments
+  for select using (public.is_space_member(space_id));
+create policy "comments insert own" on public.timeline_comments
+  for insert with check (author_id = auth.uid() and public.is_space_member(space_id));
+create policy "comments update own" on public.timeline_comments
+  for update using (author_id = auth.uid()) with check (author_id = auth.uid());
+-- delete your own comment, but never the space owner's comment.
+create policy "comments delete own" on public.timeline_comments
+  for delete using (
+    author_id = auth.uid() and not public.is_space_owner(space_id, author_id)
+  );
+
+drop trigger if exists comments_touch_updated_at on public.timeline_comments;
+create trigger comments_touch_updated_at
+  before update on public.timeline_comments
+  for each row execute function public.touch_updated_at();
 
 -- ============================================================================
 -- Follow-ups handled in later phases (not in this file):
