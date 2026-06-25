@@ -4,8 +4,11 @@ import { useState } from "react";
 import { ShieldCheck, Palette, Users, TriangleAlert } from "lucide-react";
 import AccountSecurity from "@/components/settings/account-security";
 import Appearance from "@/components/settings/appearance";
-import SpaceManagement from "@/components/settings/space-management";
+import SpaceManagement, {
+  type SpaceCard,
+} from "@/components/settings/space-management";
 import DangerZone from "@/components/settings/danger-zone";
+import type { Friend } from "@/lib/friends";
 
 type TabKey = "account" | "appearance" | "space" | "danger";
 
@@ -18,12 +21,16 @@ const TABS: { key: TabKey; label: string; Icon: typeof Users }[] = [
 
 export default function SettingsTabs({
   email,
-  spaceName,
-  anniversaryDate,
+  currentUserId,
+  activeSpaceId,
+  spaces,
+  friends,
 }: {
   email: string;
-  spaceName: string;
-  anniversaryDate: string;
+  currentUserId: string;
+  activeSpaceId: string;
+  spaces: SpaceCard[];
+  friends: Friend[];
 }) {
   const [tab, setTab] = useState<TabKey>("account");
 
@@ -57,7 +64,12 @@ export default function SettingsTabs({
         {tab === "account" && <AccountSecurity email={email} />}
         {tab === "appearance" && <Appearance />}
         {tab === "space" && (
-          <SpaceManagement spaceName={spaceName} anniversaryDate={anniversaryDate} />
+          <SpaceManagement
+            spaces={spaces}
+            friends={friends}
+            activeSpaceId={activeSpaceId}
+            currentUserId={currentUserId}
+          />
         )}
         {tab === "danger" && <DangerZone />}
       </div>

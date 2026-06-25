@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { Menu, X } from "lucide-react";
-import { navRoutes, type NavRoute } from "@/config/navigation";
+import { navRoutes, type NavRoute, type NavSection } from "@/config/navigation";
 import SpaceSwitcher from "@/components/space-switcher";
 import UserMenu from "@/components/user-menu";
-import NotificationBell, { type Invite } from "@/components/notification-bell";
+import NotificationBell from "@/components/notification-bell";
+import type { AppNotification } from "@/lib/notifications";
 
 type SpaceItem = { id: string; name: string; role: string };
 
@@ -17,7 +18,7 @@ type NavProps = {
   displayName: string;
   handle: string | null;
   avatarUrl: string | null;
-  invites: Invite[];
+  notifications: AppNotification[];
 };
 
 function NavLink({
@@ -47,13 +48,44 @@ function NavLink({
   );
 }
 
+/** Renders nav routes grouped by section, with a divider between sections. */
+function NavList({
+  isActive,
+  onNavigate,
+}: {
+  isActive: (path: string) => boolean;
+  onNavigate?: () => void;
+}) {
+  return (
+    <>
+      {navRoutes.map((route, i) => {
+        const prevSection: NavSection | null =
+          i > 0 ? navRoutes[i - 1].section : null;
+        const showDivider = prevSection !== null && route.section !== prevSection;
+        return (
+          <Fragment key={route.path}>
+            {showDivider && (
+              <div className="my-1.5 border-t border-zinc-200 dark:border-zinc-800" />
+            )}
+            <NavLink
+              route={route}
+              active={isActive(route.path)}
+              onNavigate={onNavigate}
+            />
+          </Fragment>
+        );
+      })}
+    </>
+  );
+}
+
 export default function Navigation({
   spaces,
   activeSpaceId,
   displayName,
   handle,
   avatarUrl,
-  invites,
+  notifications,
 }: NavProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -69,16 +101,10 @@ export default function Navigation({
           <div className="min-w-0 flex-1">
             <SpaceSwitcher spaces={spaces} activeSpaceId={activeSpaceId} />
           </div>
-          <NotificationBell invites={invites} />
+          <NotificationBell notifications={notifications} />
         </div>
         <nav className="mt-6 flex flex-col gap-1 px-1">
-          {navRoutes.map((route) => (
-            <NavLink
-              key={route.path}
-              route={route}
-              active={isActive(route.path)}
-            />
-          ))}
+          <NavList isActive={isActive} />
         </nav>
         <div className="mt-auto border-t border-zinc-200 pt-2 dark:border-zinc-800">
           <UserMenu
@@ -95,7 +121,7 @@ export default function Navigation({
           <div className="min-w-0 flex-1">
             <SpaceSwitcher spaces={spaces} activeSpaceId={activeSpaceId} />
           </div>
-          <NotificationBell invites={invites} />
+          <NotificationBell notifications={notifications} />
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}
@@ -108,14 +134,7 @@ export default function Navigation({
         </div>
         {open && (
           <nav className="flex flex-col gap-1 px-3 pb-3">
-            {navRoutes.map((route) => (
-              <NavLink
-                key={route.path}
-                route={route}
-                active={isActive(route.path)}
-                onNavigate={() => setOpen(false)}
-              />
-            ))}
+            <NavList isActive={isActive} onNavigate={() => setOpen(false)} />
             <div className="mt-1 border-t border-zinc-200 pt-2 dark:border-zinc-800">
               <UserMenu
                 displayName={displayName}

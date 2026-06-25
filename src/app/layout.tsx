@@ -23,8 +23,8 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Us",
-  description: "A little website for the two of us.",
+  title: "Remember",
+  description: "Remember the moments that matter — together.",
 };
 
 export default function RootLayout({

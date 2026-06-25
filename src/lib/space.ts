@@ -15,6 +15,16 @@ export type SpaceMembership = {
   id: string;
   name: string;
   role: string;
+  anniversaryDate: string | null;
+};
+
+/** A member of a space, with the profile bits needed to render them. */
+export type SpaceMemberProfile = {
+  id: string;
+  name: string;
+  handle: string | null;
+  avatarUrl: string | null;
+  role: string;
 };
 
 export type SpaceContext = {
@@ -107,6 +117,68 @@ export async function getUserSpaces(): Promise<SpaceMembership[]> {
     .filter((r) => r.spaces)
     .map((r) => {
       const s = embed(r);
-      return { id: s.id, name: s.name, role: r.role };
+      return {
+        id: s.id,
+        name: s.name,
+        role: r.role,
+        anniversaryDate: s.anniversary_date,
+      };
     });
+}
+
+/**
+ * Members of a space the signed-in user belongs to, with profile info, sorted
+ * owner-first then by name. Returns [] if the caller isn't a member (RLS would
+ * also block the read, but we guard explicitly). Profiles are readable because
+ * co-members satisfy shares_space_with().
+ */
+export async function getSpaceMembers(
+  spaceId: string,
+): Promise<SpaceMemberProfile[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: members } = await supabase
+    .from("space_members")
+    .select("user_id, role")
+    .eq("space_id", spaceId);
+  if (!members || !members.some((m) => m.user_id === user.id)) return [];
+
+  const ids = members.map((m) => m.user_id as string);
+  const { data: profs } = await supabase
+    .from("profiles")
+    .select("id, username, first_name, last_name, handle, avatar_url")
+    .in("id", ids);
+
+  const profById = new Map<string, Record<string, unknown>>();
+  for (const p of profs ?? []) profById.set(p.id as string, p);
+
+  const nameOf = (p: Record<string, unknown> | undefined): string => {
+    if (!p) return "Member";
+    const full = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+    return (full || (p.username as string) ||
+      (p.handle ? `@${p.handle}` : "Member")) as string;
+  };
+
+  return members
+    .map((m) => {
+      const p = profById.get(m.user_id as string);
+      return {
+        id: m.user_id as string,
+        name: nameOf(p),
+        handle: (p?.handle as string) ?? null,
+        avatarUrl: (p?.avatar_url as string) ?? null,
+        role: m.role as string,
+      };
+    })
+    .sort((a, b) =>
+      a.role === b.role
+        ? a.name.localeCompare(b.name)
+        : a.role === "owner"
+          ? -1
+          : 1,
+    );
 }

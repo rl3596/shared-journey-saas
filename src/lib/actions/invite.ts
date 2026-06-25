@@ -2,83 +2,90 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getSpaceContext } from "@/lib/space";
-
-export type FoundUser = {
-  id: string;
-  handle: string | null;
-  name: string | null;
-  avatarUrl: string | null;
-};
+import { getServiceClient } from "@/lib/supabase/service";
 
 type Result = { ok: true } | { ok: false; error: string };
 
-/** Find a user by EXACT @handle or email (secure RPC; no enumeration). */
-export async function searchUser(query: string): Promise<{
-  ok: boolean;
-  results?: FoundUser[];
-  error?: string;
-}> {
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function pairFilter(a: string, b: string): string {
+  return `and(requester_id.eq.${a},addressee_id.eq.${b}),and(requester_id.eq.${b},addressee_id.eq.${a})`;
+}
+
+/**
+ * Invite an ACCEPTED FRIEND to a space the caller belongs to. Creates a
+ * space_invite notification (reference_id = space_id); the recipient acts on it
+ * from the bell. Guards: caller is a member of the space, target is an accepted
+ * friend, not already a member, and no duplicate pending invite.
+ */
+export async function sendSpaceInvite(
+  friendId: string,
+  spaceId: string,
+  message?: string,
+): Promise<Result> {
+  if (!UUID_RE.test(friendId) || !UUID_RE.test(spaceId)) {
+    return { ok: false, error: "Invalid request." };
+  }
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not authenticated." };
-
-  const q = query.trim().replace(/^@/, "");
-  if (q === "") return { ok: true, results: [] };
-
-  const { data, error } = await supabase.rpc("search_profile", { query: q });
-  if (error) return { ok: false, error: error.message };
-
-  const results: FoundUser[] = (data as Record<string, unknown>[])
-    .filter((r) => r.id !== user.id) // don't offer to invite yourself
-    .map((r) => {
-      const name =
-        [r.first_name, r.last_name].filter(Boolean).join(" ").trim() ||
-        (r.username as string) ||
-        null;
-      return {
-        id: r.id as string,
-        handle: (r.handle as string) ?? null,
-        name,
-        avatarUrl: (r.avatar_url as string) ?? null,
-      };
-    });
-  return { ok: true, results };
-}
-
-/** Invite a user to the ACTIVE space. Resets any prior declined/expired invite. */
-export async function sendInvite(inviteeId: string): Promise<Result> {
-  const ctx = await getSpaceContext();
-  if (!ctx) return { ok: false, error: "Not authenticated." };
-  if (inviteeId === ctx.user.id) {
+  if (friendId === user.id) {
     return { ok: false, error: "You can't invite yourself." };
   }
 
-  // Already a member of this space?
-  const { data: existingMember } = await ctx.supabase
+  // Caller must belong to the target space.
+  const { data: myMembership } = await supabase
     .from("space_members")
     .select("user_id")
-    .eq("space_id", ctx.spaceId)
-    .eq("user_id", inviteeId)
+    .eq("space_id", spaceId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!myMembership) {
+    return { ok: false, error: "You're not in this space." };
+  }
+
+  // Must be an accepted friend.
+  const { data: friendship } = await supabase
+    .from("friendships")
+    .select("id, status")
+    .or(pairFilter(user.id, friendId))
+    .maybeSingle();
+  if (!friendship || friendship.status !== "accepted") {
+    return { ok: false, error: "You can only invite your friends." };
+  }
+
+  // Already a member of this space?
+  const { data: existingMember } = await supabase
+    .from("space_members")
+    .select("user_id")
+    .eq("space_id", spaceId)
+    .eq("user_id", friendId)
     .maybeSingle();
   if (existingMember) {
     return { ok: false, error: "They're already in this space." };
   }
 
-  // Clear any prior invite row (declined/stale) then create a fresh pending one.
-  await ctx.supabase
-    .from("space_invitations")
-    .delete()
-    .eq("space_id", ctx.spaceId)
-    .eq("invitee_id", inviteeId);
+  // Outstanding invite already pending?
+  const { data: dup } = await supabase
+    .from("notifications")
+    .select("id")
+    .eq("user_id", friendId)
+    .eq("type", "space_invite")
+    .eq("reference_id", spaceId)
+    .eq("sender_id", user.id)
+    .eq("is_read", false)
+    .maybeSingle();
+  if (dup) return { ok: false, error: "You've already invited them." };
 
-  const { error } = await ctx.supabase.from("space_invitations").insert({
-    space_id: ctx.spaceId,
-    inviter_id: ctx.user.id,
-    invitee_id: inviteeId,
-    status: "pending",
+  const { error } = await supabase.from("notifications").insert({
+    user_id: friendId,
+    sender_id: user.id,
+    type: "space_invite",
+    reference_id: spaceId,
+    message: message?.trim() || null,
   });
   if (error) return { ok: false, error: error.message };
 
@@ -86,22 +93,62 @@ export async function sendInvite(inviteeId: string): Promise<Result> {
   return { ok: true };
 }
 
-export async function acceptInvitation(invitationId: string): Promise<Result> {
+/**
+ * Respond to a space_invite notification. Accepting adds you to space_members
+ * (privileged service-role write, after validating the notification is yours)
+ * and notifies the inviter; declining just notifies them. Either way the
+ * invite notification is marked read.
+ */
+export async function respondSpaceInvite(
+  notificationId: string,
+  accept: boolean,
+): Promise<Result> {
+  if (!UUID_RE.test(notificationId)) {
+    return { ok: false, error: "Invalid invitation." };
+  }
   const supabase = await createClient();
-  const { error } = await supabase.rpc("accept_invitation", {
-    invitation_id: invitationId,
-  });
-  if (error) return { ok: false, error: error.message };
-  revalidatePath("/", "layout");
-  return { ok: true };
-}
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not authenticated." };
 
-export async function declineInvitation(invitationId: string): Promise<Result> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("decline_invitation", {
-    invitation_id: invitationId,
-  });
-  if (error) return { ok: false, error: error.message };
+  const { data: n } = await supabase
+    .from("notifications")
+    .select("id, type, reference_id, sender_id, user_id")
+    .eq("id", notificationId)
+    .maybeSingle();
+  if (!n || n.user_id !== user.id || n.type !== "space_invite") {
+    return { ok: false, error: "Invitation not found." };
+  }
+  const spaceId = n.reference_id as string;
+
+  if (accept) {
+    // space_members has no INSERT policy by design — perform the membership
+    // write with the service role after the ownership check above.
+    const svc = getServiceClient();
+    const { error: memErr } = await svc.from("space_members").upsert(
+      { space_id: spaceId, user_id: user.id, role: "member" },
+      { onConflict: "space_id,user_id", ignoreDuplicates: true },
+    );
+    if (memErr) {
+      return { ok: false, error: "That space is no longer available." };
+    }
+  }
+
+  await supabase
+    .from("notifications")
+    .update({ is_read: true })
+    .eq("id", notificationId);
+
+  if (n.sender_id) {
+    await supabase.from("notifications").insert({
+      user_id: n.sender_id,
+      sender_id: user.id,
+      type: accept ? "space_accepted" : "space_rejected",
+      reference_id: spaceId,
+    });
+  }
+
   revalidatePath("/", "layout");
   return { ok: true };
 }

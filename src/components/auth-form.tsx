@@ -68,7 +68,10 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
           <span className="flex size-12 items-center justify-center rounded-full bg-rose-100 text-rose-500 dark:bg-rose-950/50">
             <Heart className="size-6" fill="currentColor" />
           </span>
-          <h1 className="mt-4 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+          <span className="mt-3 font-[family-name:var(--font-playfair)] text-2xl font-semibold tracking-tight text-rose-500">
+            Remember
+          </span>
+          <h1 className="mt-2 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
             {isRegister ? "Create your account" : "Welcome back"}
           </h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">

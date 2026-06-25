@@ -427,10 +427,123 @@ create trigger comments_touch_updated_at
   before update on public.timeline_comments
   for each row execute function public.touch_updated_at();
 
+-- ----------------------------------------------------------------------------
+-- 9 · Friends + unified Notifications (Phase 3)
+-- ----------------------------------------------------------------------------
+create table if not exists public.friendships (
+  id           uuid primary key default gen_random_uuid(),
+  requester_id uuid not null references auth.users (id) on delete cascade,
+  addressee_id uuid not null references auth.users (id) on delete cascade,
+  status       text not null default 'pending'
+               check (status in ('pending', 'accepted', 'rejected')),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  constraint friendships_no_self check (requester_id <> addressee_id)
+);
+create unique index if not exists friendships_pair_unique
+  on public.friendships (least(requester_id, addressee_id),
+                         greatest(requester_id, addressee_id));
+create index if not exists friendships_requester_idx on public.friendships (requester_id);
+create index if not exists friendships_addressee_idx on public.friendships (addressee_id);
+
+drop trigger if exists friendships_touch_updated_at on public.friendships;
+create trigger friendships_touch_updated_at
+  before update on public.friendships
+  for each row execute function public.touch_updated_at();
+
+create table if not exists public.notifications (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users (id) on delete cascade,
+  sender_id    uuid references auth.users (id) on delete set null,
+  type         text not null check (type in (
+                 'friend_request', 'friend_accepted', 'friend_rejected',
+                 'space_invite',   'space_accepted',  'space_rejected'
+               )),
+  reference_id uuid,
+  message      text,
+  is_read      boolean not null default false,
+  created_at   timestamptz not null default now()
+);
+create index if not exists notifications_user_idx
+  on public.notifications (user_id, is_read, created_at desc);
+
+alter table public.friendships   enable row level security;
+alter table public.notifications enable row level security;
+
+create policy "friendships select" on public.friendships
+  for select using (requester_id = auth.uid() or addressee_id = auth.uid());
+create policy "friendships insert" on public.friendships
+  for insert with check (requester_id = auth.uid() and addressee_id <> auth.uid());
+create policy "friendships update" on public.friendships
+  for update using (requester_id = auth.uid() or addressee_id = auth.uid())
+              with check (requester_id = auth.uid() or addressee_id = auth.uid());
+create policy "friendships delete" on public.friendships
+  for delete using (requester_id = auth.uid() or addressee_id = auth.uid());
+
+create policy "notifications select" on public.notifications
+  for select using (user_id = auth.uid());
+create policy "notifications insert" on public.notifications
+  for insert with check (sender_id = auth.uid());
+create policy "notifications update" on public.notifications
+  for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "notifications delete" on public.notifications
+  for delete using (user_id = auth.uid());
+
+create or replace function public.get_friends_overview()
+returns table (
+  friendship_id uuid, other_id uuid, handle text, name text, avatar_url text,
+  status text, direction text, created_at timestamptz
+)
+language sql stable security definer set search_path = public
+as $$
+  select
+    f.id,
+    case when f.requester_id = auth.uid() then f.addressee_id else f.requester_id end,
+    p.handle,
+    coalesce(nullif(btrim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')), ''), p.username),
+    p.avatar_url,
+    f.status,
+    case when f.requester_id = auth.uid() then 'outgoing' else 'incoming' end,
+    f.created_at
+  from public.friendships f
+  join public.profiles p
+    on p.id = case when f.requester_id = auth.uid()
+                   then f.addressee_id else f.requester_id end
+  where f.requester_id = auth.uid() or f.addressee_id = auth.uid();
+$$;
+revoke all on function public.get_friends_overview() from public, anon;
+grant execute on function public.get_friends_overview() to authenticated;
+
+create or replace function public.get_notifications()
+returns table (
+  id uuid, type text, reference_id uuid, message text, is_read boolean,
+  created_at timestamptz, sender_id uuid, sender_handle text, sender_name text,
+  sender_avatar text, space_name text
+)
+language sql stable security definer set search_path = public
+as $$
+  select
+    n.id, n.type, n.reference_id, n.message, n.is_read, n.created_at,
+    n.sender_id, sp.handle,
+    coalesce(nullif(btrim(coalesce(sp.first_name,'') || ' ' || coalesce(sp.last_name,'')), ''), sp.username),
+    sp.avatar_url,
+    s.name
+  from public.notifications n
+  left join public.profiles sp on sp.id = n.sender_id
+  left join public.spaces s
+    on s.id = n.reference_id
+   and n.type in ('space_invite', 'space_accepted', 'space_rejected')
+  where n.user_id = auth.uid()
+  order by n.created_at desc
+  limit 50;
+$$;
+revoke all on function public.get_notifications() from public, anon;
+grant execute on function public.get_notifications() to authenticated;
+
 -- ============================================================================
 -- Follow-ups handled in later phases (not in this file):
 --   • Supabase Storage bucket + per-space RLS policies for photo uploads.
 --   • Optional normalized `photos` table (currently albums.image_urls[]).
---   • Generalizing content_rui / content_wanyun and schedule owner from fixed
---     names to per-member references once the invite/member UI exists.
+--   • Space Message Boards + Friend Direct Messaging (build on friendships +
+--     notifications above).
 -- ============================================================================
