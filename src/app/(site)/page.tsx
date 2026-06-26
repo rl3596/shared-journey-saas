@@ -5,6 +5,7 @@ import DailySlideshow from "@/components/daily-slideshow";
 import { getScheduleEvents, getAllPhotos } from "@/lib/data";
 import { getSpaceContext } from "@/lib/space";
 import { dailyPick, todayKey } from "@/lib/daily-pick";
+import { eventInstantMs } from "@/lib/timezone";
 
 const DAILY_COUNT = 20;
 
@@ -52,14 +53,14 @@ export default async function HomePage() {
 
   // eslint-disable-next-line react-hooks/purity -- Server Component rendered per request; reading the current time here is intentional.
   const now = Date.now();
-  // Soonest upcoming event across everyone in the space.
+  // Soonest upcoming event across everyone in the space (time-zone aware).
   const nextUp =
     schedule
       .map((e) => ({
         event: e,
-        ts: new Date(`${e.date}T${e.time || "00:00"}`).getTime(),
+        ts: eventInstantMs(e.date, e.time, e.timezone || undefined),
       }))
-      .filter((x) => x.ts >= now)
+      .filter((x) => !Number.isNaN(x.ts) && x.ts >= now)
       .sort((a, b) => a.ts - b.ts)[0]?.event ?? null;
 
   // Daily Slideshow set — same selection for every viewer for the entire

@@ -13,6 +13,7 @@ export async function createEvent(input: {
   title: string;
   date: string;
   time: string;
+  timezone: string;
   notes: string;
   participantIds: string[];
 }): Promise<Result> {
@@ -24,6 +25,7 @@ export async function createEvent(input: {
       title,
       date: input.date,
       time: input.time,
+      timezone: input.timezone,
       notes: input.notes.trim(),
       participantIds: input.participantIds,
     });
@@ -41,6 +43,7 @@ export async function updateEvent(
     title?: string;
     date?: string;
     time?: string;
+    timezone?: string;
     notes?: string;
     participantIds?: string[];
   },

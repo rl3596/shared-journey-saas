@@ -1,14 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, CalendarDays, Users, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, X, CalendarDays, Users, Pencil, Trash2, Loader2, Globe } from "lucide-react";
 import type { ScheduleEvent } from "@/data/schedule";
 import type { SpaceMember } from "@/lib/data";
 import { createEvent, updateEvent, deleteEvent } from "@/lib/actions/schedule";
+import {
+  eventInstantMs,
+  formatTimeInZone,
+  formatDateInZone,
+  zoneAbbrev,
+  dayKeyInZone,
+  detectTimeZone,
+  allTimeZones,
+  prettyZone,
+} from "@/lib/timezone";
 
 const FILTERS = ["All", "Mine", "Joint"] as const;
 type Filter = (typeof FILTERS)[number];
+type Scope = "upcoming" | "past";
 
 const inputClass =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-rose-400 focus:ring-2 focus:ring-rose-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100";
@@ -28,7 +39,7 @@ function formatDate(iso: string): string {
     year: "numeric",
   });
 }
-function formatTime(t: string): string {
+function plainTime(t: string): string {
   if (!t) return "";
   const [h, min] = t.split(":").map(Number);
   if (Number.isNaN(h)) return t;
@@ -36,6 +47,15 @@ function formatTime(t: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+/** Viewer's IANA zone — null during SSR/first paint, real value after mount. */
+function useViewerTimeZone(): string | null {
+  return useSyncExternalStore(
+    () => () => {},
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    () => null,
+  );
 }
 
 function styleFor(e: ScheduleEvent, currentUserId: string) {
@@ -55,6 +75,44 @@ function styleFor(e: ScheduleEvent, currentUserId: string) {
   };
 }
 
+/** Time of an event shown in its own zone, plus the viewer's local equivalent. */
+function EventTime({ e, viewerTz }: { e: ScheduleEvent; viewerTz: string | null }) {
+  if (!e.time) return null;
+  const tz = e.timezone || viewerTz || "";
+  if (!tz) {
+    return (
+      <span className="text-sm font-medium tabular-nums text-zinc-500 dark:text-zinc-400">
+        {plainTime(e.time)}
+      </span>
+    );
+  }
+  const instant = eventInstantMs(e.date, e.time, tz);
+  const own = formatTimeInZone(instant, tz);
+  const abbr = zoneAbbrev(instant, tz);
+  const showYours = !!viewerTz && !!e.timezone && e.timezone !== viewerTz;
+  let yours: string | null = null;
+  if (showYours && viewerTz) {
+    const t = formatTimeInZone(instant, viewerTz);
+    const shifted = dayKeyInZone(instant, viewerTz) !== e.date;
+    yours = shifted
+      ? `${t}, ${formatDateInZone(instant, viewerTz)} your time`
+      : `${t} your time`;
+  }
+  return (
+    <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
+      <span className="text-sm font-medium tabular-nums text-zinc-500 dark:text-zinc-400">
+        {own}
+      </span>
+      <span className="text-xs text-zinc-400">{abbr}</span>
+      {yours && (
+        <span className="text-xs font-medium text-rose-500 dark:text-rose-400">
+          · {yours}
+        </span>
+      )}
+    </span>
+  );
+}
+
 type DraftMode = "personal" | "joint";
 
 export default function ScheduleBoard({
@@ -68,28 +126,47 @@ export default function ScheduleBoard({
 }) {
   const router = useRouter();
   const events = initialEvents;
+  const viewerTz = useViewerTimeZone();
+  const zones = useMemo(() => allTimeZones(), []);
   const [filter, setFilter] = useState<Filter>("All");
+  const [scope, setScope] = useState<Scope>("upcoming");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ScheduleEvent | null>(null);
   const [mode, setMode] = useState<DraftMode>("personal");
-  const [form, setForm] = useState({ title: "", date: "", time: "12:00", notes: "" });
+  const [form, setForm] = useState({
+    title: "",
+    date: "",
+    time: "12:00",
+    timezone: "UTC",
+    notes: "",
+  });
   const [participants, setParticipants] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ScheduleEvent | null>(null);
 
+  // Capture "now" once per render for past/upcoming classification.
+  const [now] = useState(() => Date.now());
+
   const groups = useMemo(() => {
-    const filtered = events.filter((e) =>
+    const instantOf = (e: ScheduleEvent) =>
+      eventInstantMs(e.date, e.time, e.timezone || viewerTz || "UTC");
+    const owned = events.filter((e) =>
       filter === "All"
         ? true
         : filter === "Mine"
           ? e.creatorId === currentUserId
           : e.isJoint,
     );
-    const sorted = [...filtered].sort((a, b) =>
-      a.date === b.date ? a.time.localeCompare(b.time) : a.date.localeCompare(b.date),
-    );
+    const scoped = owned.filter((e) => {
+      const isPast = instantOf(e) < now;
+      return scope === "past" ? isPast : !isPast;
+    });
+    const sorted = [...scoped].sort((a, b) => {
+      const diff = instantOf(a) - instantOf(b);
+      return scope === "past" ? -diff : diff;
+    });
     const out: { date: string; items: ScheduleEvent[] }[] = [];
     for (const e of sorted) {
       const last = out[out.length - 1];
@@ -97,12 +174,18 @@ export default function ScheduleBoard({
       else out.push({ date: e.date, items: [e] });
     }
     return out;
-  }, [events, filter, currentUserId]);
+  }, [events, filter, scope, currentUserId, viewerTz, now]);
 
   const openCreate = (m: DraftMode) => {
     setEditing(null);
     setMode(m);
-    setForm({ title: "", date: todayISO(), time: "12:00", notes: "" });
+    setForm({
+      title: "",
+      date: todayISO(),
+      time: "12:00",
+      timezone: detectTimeZone(),
+      notes: "",
+    });
     setParticipants(new Set());
     setError(null);
     setDialogOpen(true);
@@ -110,7 +193,13 @@ export default function ScheduleBoard({
   const openEdit = (e: ScheduleEvent) => {
     setEditing(e);
     setMode(e.isJoint ? "joint" : "personal");
-    setForm({ title: e.title, date: e.date, time: e.time || "12:00", notes: e.notes });
+    setForm({
+      title: e.title,
+      date: e.date,
+      time: e.time || "12:00",
+      timezone: e.timezone || detectTimeZone(),
+      notes: e.notes,
+    });
     setParticipants(new Set(e.participantIds));
     setError(null);
     setDialogOpen(true);
@@ -135,6 +224,7 @@ export default function ScheduleBoard({
       title: form.title,
       date: form.date,
       time: form.time,
+      timezone: form.timezone,
       notes: form.notes,
       participantIds,
     };
@@ -143,7 +233,10 @@ export default function ScheduleBoard({
       : await createEvent(payload);
     if (res.ok) {
       setDialogOpen(false);
-      if (!editing) setFilter("All");
+      if (!editing) {
+        setFilter("All");
+        setScope("upcoming");
+      }
       router.refresh();
     } else {
       setError(res.error);
@@ -189,25 +282,46 @@ export default function ScheduleBoard({
     <>
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {FILTERS.map((f) => {
-            const active = filter === f;
-            return (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Upcoming / Past */}
+          <div className="inline-flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800">
+            {(["upcoming", "past"] as const).map((sc) => (
               <button
-                key={f}
+                key={sc}
                 type="button"
-                onClick={() => setFilter(f)}
-                aria-pressed={active}
-                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                onClick={() => setScope(sc)}
+                aria-pressed={scope === sc}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
+                  scope === sc
+                    ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-50"
+                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
                 }`}
               >
-                {f}
+                {sc}
               </button>
-            );
-          })}
+            ))}
+          </div>
+          {/* All / Mine / Joint */}
+          <div className="flex flex-wrap gap-2">
+            {FILTERS.map((f) => {
+              const active = filter === f;
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setFilter(f)}
+                  aria-pressed={active}
+                  className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                    active
+                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {f}
+                </button>
+              );
+            })}
+          </div>
         </div>
         {hasMembers && (
           <button
@@ -225,7 +339,9 @@ export default function ScheduleBoard({
       <div className="mt-6 space-y-6">
         {groups.length === 0 && (
           <div className="rounded-xl border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            No events here yet. Tap the + button to add one.
+            {scope === "past"
+              ? "No past events to look back on yet."
+              : "No upcoming events. Tap the + button to add one."}
           </div>
         )}
         {groups.map((group) => (
@@ -268,9 +384,7 @@ export default function ScheduleBoard({
                       </div>
                     )}
                     <div className="flex flex-wrap items-center gap-2 pr-16">
-                      <span className="text-sm font-medium tabular-nums text-zinc-500 dark:text-zinc-400">
-                        {formatTime(e.time)}
-                      </span>
+                      <EventTime e={e} viewerTz={viewerTz} />
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.badge}`}>
                         {e.isJoint ? "Joint" : mine ? "You" : e.creatorName}
                       </span>
@@ -371,6 +485,30 @@ export default function ScheduleBoard({
                   />
                 </label>
               </div>
+
+              <label className="block">
+                <span className={labelText}>
+                  <Globe className="mr-1 inline size-3.5 align-[-2px]" />
+                  Time zone
+                </span>
+                <select
+                  value={form.timezone}
+                  onChange={(ev) => setForm((f) => ({ ...f, timezone: ev.target.value }))}
+                  className={inputClass}
+                >
+                  {!zones.includes(form.timezone) && form.timezone && (
+                    <option value={form.timezone}>{prettyZone(form.timezone)}</option>
+                  )}
+                  {zones.map((z) => (
+                    <option key={z} value={z}>
+                      {prettyZone(z)}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs text-zinc-400">
+                  Others see this time converted to their own zone.
+                </span>
+              </label>
 
               {/* Joint participant picker */}
               {hasMembers && (

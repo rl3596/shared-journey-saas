@@ -164,7 +164,8 @@ create table if not exists public.schedule_events (
   owner           text,               -- legacy label (unused)
   title           text not null,
   date            text not null,          -- YYYY-MM-DD
-  time            text not null default '', -- HH:MM (24h)
+  time            text not null default '', -- HH:MM (24h), in `timezone`
+  timezone        text not null default '', -- IANA zone the time is expressed in
   notes           text not null default '',
   created_at      timestamptz not null default now()
 );

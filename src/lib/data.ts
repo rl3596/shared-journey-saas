@@ -463,19 +463,14 @@ export async function deleteAlbum(albumId: string): Promise<boolean> {
 // ---------- Schedule ----------
 
 export async function getScheduleEvents(): Promise<ScheduleEvent[]> {
-  // Hide past events: only future + still-ongoing items (start time >= now).
-  const now = Date.now();
-  const isUpcoming = (e: ScheduleEvent) => {
-    const t = new Date(`${e.date}T${e.time || "00:00"}`).getTime();
-    return Number.isNaN(t) || t >= now;
-  };
-
+  // Return ALL events (past + upcoming); the board splits them by time scope so
+  // the whole space can browse history as well as what's coming up.
   const ctx = await getSpaceContext();
   if (!ctx) return [];
 
   const { data, error } = await ctx.supabase
     .from("schedule_events")
-    .select("id,creator_id,participant_ids,title,date,time,notes")
+    .select("id,creator_id,participant_ids,title,date,time,timezone,notes")
     .eq("space_id", ctx.spaceId)
     .order("date", { ascending: true })
     .order("time", { ascending: true });
@@ -500,29 +495,29 @@ export async function getScheduleEvents(): Promise<ScheduleEvent[]> {
     for (const p of profs ?? []) nameById.set(p.id, profileName(p));
   }
 
-  return data
-    .map((row) => {
-      const participantIds = (row.participant_ids ?? []) as string[];
-      return {
-        id: row.id,
-        creatorId: row.creator_id ?? "",
-        creatorName: nameById.get(row.creator_id) ?? "Member",
-        participantIds,
-        participantNames: participantIds.map((p) => nameById.get(p) ?? "Member"),
-        isJoint: participantIds.length > 0,
-        title: row.title,
-        date: row.date,
-        time: row.time,
-        notes: row.notes ?? "",
-      };
-    })
-    .filter(isUpcoming);
+  return data.map((row) => {
+    const participantIds = (row.participant_ids ?? []) as string[];
+    return {
+      id: row.id,
+      creatorId: row.creator_id ?? "",
+      creatorName: nameById.get(row.creator_id) ?? "Member",
+      participantIds,
+      participantNames: participantIds.map((p) => nameById.get(p) ?? "Member"),
+      isJoint: participantIds.length > 0,
+      title: row.title,
+      date: row.date,
+      time: row.time,
+      timezone: row.timezone ?? "",
+      notes: row.notes ?? "",
+    };
+  });
 }
 
 export async function addScheduleEvent(input: {
   title: string;
   date: string;
   time: string;
+  timezone: string;
   notes: string;
   participantIds: string[];
 }): Promise<boolean> {
@@ -537,6 +532,7 @@ export async function addScheduleEvent(input: {
     title: input.title,
     date: input.date,
     time: input.time,
+    timezone: input.timezone,
     notes: input.notes,
   });
   if (error) {
@@ -552,6 +548,7 @@ export async function updateScheduleEvent(
     title?: string;
     date?: string;
     time?: string;
+    timezone?: string;
     notes?: string;
     participantIds?: string[];
   },
@@ -563,6 +560,7 @@ export async function updateScheduleEvent(
   if (fields.title !== undefined) patch.title = fields.title;
   if (fields.date !== undefined) patch.date = fields.date;
   if (fields.time !== undefined) patch.time = fields.time;
+  if (fields.timezone !== undefined) patch.timezone = fields.timezone;
   if (fields.notes !== undefined) patch.notes = fields.notes;
   if (fields.participantIds !== undefined)
     patch.participant_ids = fields.participantIds;

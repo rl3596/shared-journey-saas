@@ -8,6 +8,7 @@ export type ScheduleEvent = {
   isJoint: boolean;
   title: string;
   date: string; // "YYYY-MM-DD"
-  time: string; // "HH:MM" (24-hour)
+  time: string; // "HH:MM" (24-hour), expressed in `timezone`
+  timezone: string; // IANA zone the time is in ("" = unknown/legacy)
   notes: string;
 };
