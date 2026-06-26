@@ -490,9 +490,11 @@ create policy "notifications update" on public.notifications
 create policy "notifications delete" on public.notifications
   for delete using (user_id = auth.uid());
 
+drop function if exists public.get_friends_overview();
 create or replace function public.get_friends_overview()
 returns table (
   friendship_id uuid, other_id uuid, handle text, name text, avatar_url text,
+  location text, bio text,
   status text, direction text, created_at timestamptz
 )
 language sql stable security definer set search_path = public
@@ -503,6 +505,8 @@ as $$
     p.handle,
     coalesce(nullif(btrim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')), ''), p.username),
     p.avatar_url,
+    p.location,
+    p.bio,
     f.status,
     case when f.requester_id = auth.uid() then 'outgoing' else 'incoming' end,
     f.created_at

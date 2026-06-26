@@ -10,6 +10,8 @@ import {
   X,
   Clock,
   Users,
+  MapPin,
+  AtSign,
 } from "lucide-react";
 import type { FriendLink } from "@/lib/friends";
 import {
@@ -60,6 +62,9 @@ export default function FriendsView({ links }: { links: FriendLink[] }) {
 
   // Respond-to-incoming busy id.
   const [respondId, setRespondId] = useState<string | null>(null);
+
+  // Mini-profile popover for a clicked friend.
+  const [profileTarget, setProfileTarget] = useState<FriendLink | null>(null);
 
   const accepted = useMemo(
     () =>
@@ -268,13 +273,20 @@ export default function FriendsView({ links }: { links: FriendLink[] }) {
                 key={f.friendshipId}
                 className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
               >
-                <Avatar url={f.avatarUrl} fallback={f.name[0] ?? "·"} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">{f.name}</p>
-                  {f.handle && (
-                    <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">@{f.handle}</p>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setProfileTarget(f)}
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-opacity hover:opacity-70"
+                  aria-label={`View ${f.name}'s profile`}
+                >
+                  <Avatar url={f.avatarUrl} fallback={f.name[0] ?? "·"} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">{f.name}</p>
+                    {f.handle && (
+                      <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">@{f.handle}</p>
+                    )}
+                  </div>
+                </button>
                 {/* Reserved for a future "Message" button (Friend DMs). */}
               </li>
             ))}
@@ -307,6 +319,64 @@ export default function FriendsView({ links }: { links: FriendLink[] }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Friend mini-profile */}
+      {profileTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setProfileTarget(null)}
+            aria-hidden
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900"
+          >
+            <button
+              type="button"
+              onClick={() => setProfileTarget(null)}
+              aria-label="Close"
+              className="absolute right-3 top-3 rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+            >
+              <X className="size-5" />
+            </button>
+            <div className="flex flex-col items-center text-center">
+              <Avatar
+                url={profileTarget.avatarUrl}
+                fallback={profileTarget.name[0] ?? "·"}
+                size="size-20"
+              />
+              <h2 className="mt-3 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+                {profileTarget.name}
+              </h2>
+              {profileTarget.handle && (
+                <p className="mt-0.5 inline-flex items-center gap-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  <AtSign className="size-3.5" />
+                  {profileTarget.handle}
+                </p>
+              )}
+              {profileTarget.location && (
+                <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-300">
+                  <MapPin className="size-4 text-rose-500" />
+                  {profileTarget.location}
+                </p>
+              )}
+            </div>
+            {profileTarget.bio ? (
+              <p className="mt-4 whitespace-pre-wrap border-t border-zinc-100 pt-4 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                {profileTarget.bio}
+              </p>
+            ) : (
+              !profileTarget.location && (
+                <p className="mt-4 border-t border-zinc-100 pt-4 text-center text-sm text-zinc-400 dark:border-zinc-800">
+                  No details shared yet.
+                </p>
+              )
+            )}
+          </div>
         </div>
       )}
 
