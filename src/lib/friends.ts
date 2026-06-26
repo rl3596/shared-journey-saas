@@ -13,6 +13,8 @@ export type FriendLink = {
   avatarUrl: string | null;
   location: string | null;
   bio: string | null;
+  pronouns: string | null;
+  links: string | null;
   status: FriendStatus;
   direction: FriendDirection;
   createdAt: string;
@@ -36,6 +38,8 @@ function mapRow(r: Record<string, unknown>): FriendLink {
     avatarUrl: (r.avatar_url as string) ?? null,
     location: (r.location as string) ?? null,
     bio: (r.bio as string) ?? null,
+    pronouns: (r.pronouns as string) ?? null,
+    links: (r.links as string) ?? null,
     status: r.status as FriendStatus,
     direction: r.direction as FriendDirection,
     createdAt: r.created_at as string,

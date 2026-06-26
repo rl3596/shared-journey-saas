@@ -12,6 +12,7 @@ import {
   Users,
   MapPin,
   AtSign,
+  Link2,
 } from "lucide-react";
 import type { FriendLink } from "@/lib/friends";
 import {
@@ -20,6 +21,37 @@ import {
   respondFriendRequest,
   type FoundUser,
 } from "@/lib/actions/friends";
+
+/** Render freeform "personal links" (one per line), linkifying URLs. */
+function renderLinks(raw: string) {
+  const items = raw
+    .split(/\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return items.map((item, i) => {
+    const href = /^https?:\/\//i.test(item)
+      ? item
+      : /^[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(item)
+        ? `https://${item}`
+        : null;
+    return href ? (
+      <a
+        key={i}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1.5 truncate text-sm text-rose-600 hover:underline dark:text-rose-400"
+      >
+        <Link2 className="size-3.5 shrink-0" />
+        {item}
+      </a>
+    ) : (
+      <span key={i} className="block truncate text-sm text-zinc-600 dark:text-zinc-300">
+        {item}
+      </span>
+    );
+  });
+}
 
 function Avatar({
   url,
@@ -352,12 +384,19 @@ export default function FriendsView({ links }: { links: FriendLink[] }) {
               <h2 className="mt-3 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
                 {profileTarget.name}
               </h2>
-              {profileTarget.handle && (
-                <p className="mt-0.5 inline-flex items-center gap-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  <AtSign className="size-3.5" />
-                  {profileTarget.handle}
-                </p>
-              )}
+              <div className="mt-0.5 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+                {profileTarget.handle && (
+                  <span className="inline-flex items-center gap-1">
+                    <AtSign className="size-3.5" />
+                    {profileTarget.handle}
+                  </span>
+                )}
+                {profileTarget.pronouns && (
+                  <span className="text-zinc-400 dark:text-zinc-500">
+                    · {profileTarget.pronouns}
+                  </span>
+                )}
+              </div>
               {profileTarget.location && (
                 <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-300">
                   <MapPin className="size-4 text-rose-500" />
@@ -365,17 +404,24 @@ export default function FriendsView({ links }: { links: FriendLink[] }) {
                 </p>
               )}
             </div>
-            {profileTarget.bio ? (
+            {profileTarget.bio && (
               <p className="mt-4 whitespace-pre-wrap border-t border-zinc-100 pt-4 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
                 {profileTarget.bio}
               </p>
-            ) : (
-              !profileTarget.location && (
+            )}
+            {profileTarget.links && (
+              <div className="mt-4 space-y-1 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+                {renderLinks(profileTarget.links)}
+              </div>
+            )}
+            {!profileTarget.bio &&
+              !profileTarget.location &&
+              !profileTarget.pronouns &&
+              !profileTarget.links && (
                 <p className="mt-4 border-t border-zinc-100 pt-4 text-center text-sm text-zinc-400 dark:border-zinc-800">
                   No details shared yet.
                 </p>
-              )
-            )}
+              )}
           </div>
         </div>
       )}

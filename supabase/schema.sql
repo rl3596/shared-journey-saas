@@ -33,10 +33,12 @@ create table if not exists public.spaces (
 
 create table if not exists public.profiles (
   id          uuid primary key references auth.users (id) on delete cascade,
-  username    text,                 -- display name
+  username    text,                 -- the single display name
   handle      text,                 -- @handle, unique; lowercase [a-z0-9_]{3,30}
-  first_name  text,
-  last_name   text,
+  first_name  text,                 -- deprecated (folded into username)
+  last_name   text,                 -- deprecated (folded into username)
+  pronouns    text,
+  links       text,                 -- personal links (freeform, one per line)
   location    text,
   bio         text,
   avatar_url  text,
@@ -541,7 +543,7 @@ drop function if exists public.get_friends_overview();
 create or replace function public.get_friends_overview()
 returns table (
   friendship_id uuid, other_id uuid, handle text, name text, avatar_url text,
-  location text, bio text,
+  location text, bio text, pronouns text, links text,
   status text, direction text, created_at timestamptz
 )
 language sql stable security definer set search_path = public
@@ -550,10 +552,12 @@ as $$
     f.id,
     case when f.requester_id = auth.uid() then f.addressee_id else f.requester_id end,
     p.handle,
-    coalesce(nullif(btrim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')), ''), p.username),
+    coalesce(nullif(btrim(p.username), ''), '@' || p.handle, 'Member'),
     p.avatar_url,
     p.location,
     p.bio,
+    p.pronouns,
+    p.links,
     f.status,
     case when f.requester_id = auth.uid() then 'outgoing' else 'incoming' end,
     f.created_at
@@ -577,7 +581,7 @@ as $$
   select
     n.id, n.type, n.reference_id, n.message, n.is_read, n.created_at,
     n.sender_id, sp.handle,
-    coalesce(nullif(btrim(coalesce(sp.first_name,'') || ' ' || coalesce(sp.last_name,'')), ''), sp.username),
+    coalesce(nullif(btrim(sp.username), ''), '@' || sp.handle),
     sp.avatar_url,
     s.name
   from public.notifications n

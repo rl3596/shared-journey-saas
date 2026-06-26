@@ -158,7 +158,7 @@ export async function getSpaceMembers(
   const ids = members.map((m) => m.user_id as string);
   const { data: profs } = await supabase
     .from("profiles")
-    .select("id, username, first_name, last_name, handle, avatar_url")
+    .select("id, username, handle, avatar_url")
     .in("id", ids);
 
   const profById = new Map<string, Record<string, unknown>>();
@@ -166,8 +166,7 @@ export async function getSpaceMembers(
 
   const nameOf = (p: Record<string, unknown> | undefined): string => {
     if (!p) return "Member";
-    const full = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
-    return (full || (p.username as string) ||
+    return ((p.username as string)?.trim() ||
       (p.handle ? `@${p.handle}` : "Member")) as string;
   };
 

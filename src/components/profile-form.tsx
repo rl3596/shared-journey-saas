@@ -22,8 +22,8 @@ export default function ProfileForm({
   initial: {
     username: string;
     handle: string;
-    firstName: string;
-    lastName: string;
+    pronouns: string;
+    links: string;
     location: string;
     bio: string;
     avatarUrl: string;
@@ -70,7 +70,7 @@ export default function ProfileForm({
       {/* Avatar — pick from your phone's photos */}
       <AvatarUpload
         value={form.avatarUrl}
-        fallbackName={form.firstName || form.username || "·"}
+        fallbackName={form.username || "·"}
         onChange={(url) => {
           set("avatarUrl", url);
           router.refresh(); // update the sidebar card immediately
@@ -79,12 +79,12 @@ export default function ProfileForm({
 
       <div className="mt-5 space-y-4">
         <label className="block">
-          <span className={labelText}>Display name</span>
+          <span className={labelText}>Name</span>
           <input
             type="text"
             value={form.username}
             onChange={(e) => set("username", e.target.value)}
-            placeholder="How you're shown"
+            placeholder="How you're shown everywhere"
             className={inputClass}
           />
         </label>
@@ -128,26 +128,18 @@ export default function ProfileForm({
           )}
         </label>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className={labelText}>First name</span>
-            <input
-              type="text"
-              value={form.firstName}
-              onChange={(e) => set("firstName", e.target.value)}
-              className={inputClass}
-            />
-          </label>
-          <label className="block">
-            <span className={labelText}>Last name</span>
-            <input
-              type="text"
-              value={form.lastName}
-              onChange={(e) => set("lastName", e.target.value)}
-              className={inputClass}
-            />
-          </label>
-        </div>
+        <label className="block">
+          <span className={labelText}>
+            Pronouns <span className="font-normal text-zinc-400">(optional)</span>
+          </span>
+          <input
+            type="text"
+            value={form.pronouns}
+            onChange={(e) => set("pronouns", e.target.value)}
+            placeholder="e.g. she/her, he/him, they/them"
+            className={inputClass}
+          />
+        </label>
 
         <label className="block">
           <span className={labelText}>Location</span>
@@ -157,6 +149,20 @@ export default function ProfileForm({
             onChange={(e) => set("location", e.target.value)}
             placeholder="City, Country"
             className={inputClass}
+          />
+        </label>
+
+        <label className="block">
+          <span className={labelText}>
+            Personal links{" "}
+            <span className="font-normal text-zinc-400">(one per line)</span>
+          </span>
+          <textarea
+            rows={3}
+            value={form.links}
+            onChange={(e) => set("links", e.target.value)}
+            placeholder={"https://instagram.com/you\nhttps://your.site"}
+            className={`${inputClass} resize-none`}
           />
         </label>
 

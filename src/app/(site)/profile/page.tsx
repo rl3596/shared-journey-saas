@@ -26,10 +26,7 @@ export default async function ProfilePage() {
   const profile = await getProfile();
   if (!profile) redirect("/login");
 
-  const suggestedHandle = suggestHandle(
-    profile.username || profile.firstName || "friend",
-    profile.id,
-  );
+  const suggestedHandle = suggestHandle(profile.username || "friend", profile.id);
 
   return (
     <section className="mx-auto max-w-xl space-y-6">
@@ -45,8 +42,8 @@ export default async function ProfilePage() {
         initial={{
           username: profile.username ?? "",
           handle: profile.handle ?? "",
-          firstName: profile.firstName ?? "",
-          lastName: profile.lastName ?? "",
+          pronouns: profile.pronouns ?? "",
+          links: profile.links ?? "",
           location: profile.location ?? "",
           bio: profile.bio ?? "",
           avatarUrl: profile.avatarUrl ?? "",

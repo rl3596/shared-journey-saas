@@ -48,8 +48,8 @@ export async function uploadAvatar(
 export async function updateProfile(input: {
   username: string;
   handle: string;
-  firstName: string;
-  lastName: string;
+  pronouns: string;
+  links: string;
   location: string;
   bio: string;
   avatarUrl: string;
@@ -74,8 +74,8 @@ export async function updateProfile(input: {
     .update({
       username: input.username.trim() || null,
       handle: handle || null,
-      first_name: input.firstName.trim() || null,
-      last_name: input.lastName.trim() || null,
+      pronouns: input.pronouns.trim() || null,
+      links: input.links.trim() || null,
       location: input.location.trim() || null,
       bio: input.bio.trim() || null,
       avatar_url: input.avatarUrl.trim() || null,

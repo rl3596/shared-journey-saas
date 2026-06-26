@@ -16,12 +16,9 @@ export type {
 
 function profileName(p: {
   username?: string | null;
-  first_name?: string | null;
-  last_name?: string | null;
   handle?: string | null;
 }): string {
-  const full = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
-  return full || p.username || (p.handle ? `@${p.handle}` : "Member");
+  return p.username?.trim() || (p.handle ? `@${p.handle}` : "Member");
 }
 
 // Parse a (possibly free-form) date like "August 19, 2024" or "2024-08-19".
@@ -59,7 +56,7 @@ export async function getTimelineEvents(): Promise<TimelineEvent[]> {
   if (authorIds.length > 0) {
     const { data: profs } = await ctx.supabase
       .from("profiles")
-      .select("id,username,first_name,last_name,handle")
+      .select("id,username,handle")
       .in("id", authorIds);
     for (const p of profs ?? []) nameById.set(p.id, profileName(p));
   }
@@ -490,7 +487,7 @@ export async function getScheduleEvents(): Promise<ScheduleEvent[]> {
   if (ids.size > 0) {
     const { data: profs } = await ctx.supabase
       .from("profiles")
-      .select("id,username,first_name,last_name,handle")
+      .select("id,username,handle")
       .in("id", [...ids]);
     for (const p of profs ?? []) nameById.set(p.id, profileName(p));
   }
@@ -613,7 +610,7 @@ export async function getOtherSpaceMembers(): Promise<SpaceMember[]> {
 
   const { data: profs } = await ctx.supabase
     .from("profiles")
-    .select("id,username,first_name,last_name,handle")
+    .select("id,username,handle")
     .in("id", others);
   return (profs ?? []).map((p) => ({ id: p.id, name: profileName(p) }));
 }

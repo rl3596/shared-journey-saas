@@ -41,10 +41,7 @@ export async function searchUser(query: string): Promise<{
   const results: FoundUser[] = (data as Record<string, unknown>[])
     .filter((r) => r.id !== user.id) // don't offer to add yourself
     .map((r) => {
-      const name =
-        [r.first_name, r.last_name].filter(Boolean).join(" ").trim() ||
-        (r.username as string) ||
-        null;
+      const name = (r.username as string)?.trim() || null;
       return {
         id: r.id as string,
         handle: (r.handle as string) ?? null,
