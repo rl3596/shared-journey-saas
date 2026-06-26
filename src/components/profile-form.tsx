@@ -17,6 +17,7 @@ type Status = { kind: "idle" | "saving" | "saved" | "error"; message?: string };
 
 export default function ProfileForm({
   initial,
+  suggestedHandle,
 }: {
   initial: {
     username: string;
@@ -27,6 +28,7 @@ export default function ProfileForm({
     bio: string;
     avatarUrl: string;
   };
+  suggestedHandle: string;
 }) {
   const router = useRouter();
   const [form, setForm] = useState(initial);
@@ -35,8 +37,9 @@ export default function ProfileForm({
   const set = (k: keyof typeof form, v: string) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  const trimmedHandle = form.handle.trim();
   const handleValid =
-    form.handle.trim() === "" || HANDLE_RE.test(form.handle.trim().toLowerCase());
+    trimmedHandle === "" || HANDLE_RE.test(trimmedHandle.toLowerCase());
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,13 +99,31 @@ export default function ProfileForm({
               onChange={(e) =>
                 set("handle", e.target.value.toLowerCase().replace(/\s/g, ""))
               }
-              placeholder="rui_9921"
+              placeholder={suggestedHandle}
               className={inputClass}
             />
           </div>
-          {!handleValid && (
+          {!handleValid ? (
             <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
               3–30 characters: lowercase letters, numbers, underscores.
+            </p>
+          ) : trimmedHandle === "" ? (
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              You don&apos;t have a handle yet — friends can only find you by
+              email. Pick one and save to be searchable by{" "}
+              <span className="font-medium">@handle</span>.{" "}
+              <button
+                type="button"
+                onClick={() => set("handle", suggestedHandle)}
+                className="font-medium text-rose-600 hover:underline dark:text-rose-400"
+              >
+                Use {suggestedHandle}
+              </button>
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              After saving, friends can find you at{" "}
+              <span className="font-medium">@{trimmedHandle}</span>.
             </p>
           )}
         </label>
