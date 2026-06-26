@@ -22,7 +22,11 @@ security definer
 set search_path = public
 as $$
 begin
+  -- Restrict only IN-APP users: a logged-in non-owner can't change the
+  -- background. Backend/admin contexts (SQL editor, service-role) have a NULL
+  -- auth.uid() and are trusted, so they pass through.
   if new.background_url is distinct from old.background_url
+     and auth.uid() is not null
      and not public.is_space_owner(new.id, auth.uid()) then
     raise exception 'Only the space owner can change the background';
   end if;
