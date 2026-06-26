@@ -135,10 +135,8 @@ export async function respondSpaceInvite(
     }
   }
 
-  await supabase
-    .from("notifications")
-    .update({ is_read: true })
-    .eq("id", notificationId);
+  // Remove the invite notification — it's been acted on.
+  await supabase.from("notifications").delete().eq("id", notificationId);
 
   if (n.sender_id) {
     await supabase.from("notifications").insert({

@@ -176,10 +176,11 @@ export async function respondFriendRequest(
     .eq("id", friendshipId);
   if (upErr) return { ok: false, error: upErr.message };
 
-  // Mark the incoming request notification read.
+  // Remove the request notification — it's been acted on, so it shouldn't
+  // linger in the bell.
   await supabase
     .from("notifications")
-    .update({ is_read: true })
+    .delete()
     .eq("user_id", user.id)
     .eq("type", "friend_request")
     .eq("reference_id", friendshipId);
