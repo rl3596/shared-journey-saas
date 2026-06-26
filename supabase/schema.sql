@@ -270,13 +270,33 @@ security definer
 set search_path = public
 as $$
 declare
-  new_space_id uuid;
+  new_space_id     uuid;
   default_username text;
+  base_handle      text;
+  candidate        text;
 begin
   default_username := coalesce(nullif(split_part(new.email, '@', 1), ''), 'friend');
 
-  insert into public.profiles (id, username)
-  values (new.id, default_username);
+  -- Auto-assign a unique, valid @handle so new users are immediately searchable
+  -- on the Friends page (they can change it on their Profile later).
+  base_handle := btrim(
+    regexp_replace(
+      regexp_replace(lower(split_part(new.email, '@', 1)), '[^a-z0-9_]', '_', 'g'),
+      '_+', '_', 'g'
+    ), '_');
+  if length(base_handle) = 0 then
+    base_handle := 'friend';
+  end if;
+  base_handle := left(base_handle, 24);
+
+  candidate := base_handle;
+  while length(candidate) < 3
+        or exists (select 1 from public.profiles where handle = candidate) loop
+    candidate := base_handle || '_' || (floor(random() * 9000 + 1000)::int)::text;
+  end loop;
+
+  insert into public.profiles (id, username, handle)
+  values (new.id, default_username, candidate);
 
   insert into public.spaces (name)
   values ('My Space')
