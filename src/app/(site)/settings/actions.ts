@@ -54,6 +54,44 @@ export async function updateSpaceById(
 }
 
 /**
+ * Set (or clear, with "") a space's background image. Owner-only — the
+ * background is shared by everyone in the space. RLS allows any member to
+ * update spaces, so the owner check is enforced here.
+ */
+export async function updateSpaceBackground(
+  spaceId: string,
+  url: string,
+): Promise<ActionResult> {
+  if (!UUID_RE.test(spaceId)) return { ok: false, error: "Invalid space." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not authenticated." };
+
+  const { data: membership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", spaceId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!membership) return { ok: false, error: "Space not found." };
+  if (membership.role !== "owner") {
+    return { ok: false, error: "Only the owner can change the background." };
+  }
+
+  const { error } = await supabase
+    .from("spaces")
+    .update({ background_url: url.trim() || null })
+    .eq("id", spaceId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/", "layout");
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/**
  * Permanently delete a space and all its content. Owner-only. Uses the
  * service-role client (spaces has no DELETE policy) after verifying the caller
  * owns it. Refuses to delete the caller's only space, and clears the

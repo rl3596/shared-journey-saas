@@ -23,14 +23,23 @@ export default async function SiteLayout({
 
   return (
     <JourneyAdminProvider>
-      {/* Sunset backdrop for Home, Gallery, and Schedule. Fixed so it
-          parallaxes nicely as you scroll. Sits at -z-10; the Journey page
-          paints its own fixed bg image (also -z-10, but later in DOM
-          order) which visually covers this gradient on that page. */}
+      {/* Default sunset backdrop — shown when the active space has no custom
+          background. Fixed so it parallaxes as you scroll. */}
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-b from-violet-300 via-rose-300 to-amber-200 dark:from-violet-900 dark:via-rose-900 dark:to-amber-900"
       />
+      {/* Per-space background picture (shared by everyone in the space). Sits
+          above the gradient; a readability scrim keeps content legible. */}
+      {ctx.space.backgroundUrl && (
+        <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: `url('${ctx.space.backgroundUrl}')` }}
+          />
+          <div className="absolute inset-0 bg-white/55 dark:bg-zinc-950/60" />
+        </div>
+      )}
       <Navigation
         spaces={spaces}
         activeSpaceId={ctx.spaceId}

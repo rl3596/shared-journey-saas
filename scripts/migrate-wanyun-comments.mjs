@@ -1,4 +1,3 @@
-/* eslint-disable */
 /**
  * One-time migration: turn each timeline_event's legacy `content_wanyun` text
  * into a per-member journey comment authored by Wanyun, now that she's joined

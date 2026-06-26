@@ -20,6 +20,7 @@ export default async function SettingsPage() {
       name: s.name,
       role: s.role,
       anniversaryDate: s.anniversaryDate ?? "",
+      backgroundUrl: s.backgroundUrl ?? "",
       members: await getSpaceMembers(s.id),
     })),
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -12,10 +12,17 @@ import {
   X,
   ChevronRight,
   TriangleAlert,
+  ImagePlus,
 } from "lucide-react";
-import { updateSpaceById, deleteSpace } from "@/app/(site)/settings/actions";
+import {
+  updateSpaceById,
+  deleteSpace,
+  uploadBackground,
+  updateSpaceBackground,
+} from "@/app/(site)/settings/actions";
 import { createSpace } from "@/lib/actions/space";
 import { sendSpaceInvite } from "@/lib/actions/invite";
+import { prepareImageForUpload } from "@/lib/heic-convert";
 import type { Friend } from "@/lib/friends";
 import type { SpaceMemberProfile } from "@/lib/space";
 
@@ -24,6 +31,7 @@ export type SpaceCard = {
   name: string;
   role: string;
   anniversaryDate: string;
+  backgroundUrl: string;
   members: SpaceMemberProfile[];
 };
 
@@ -244,6 +252,44 @@ function SpaceDetail({
     }
   };
 
+  // Background (owner-only).
+  const bgInputRef = useRef<HTMLInputElement>(null);
+  const [bgBusy, setBgBusy] = useState(false);
+  const [bgError, setBgError] = useState<string | null>(null);
+
+  const onPickBackground = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBgBusy(true);
+    setBgError(null);
+    try {
+      const ready = await prepareImageForUpload(file);
+      const fd = new FormData();
+      fd.append("file", ready);
+      const up = await uploadBackground(fd);
+      if (!up.ok) {
+        setBgError(up.error);
+      } else {
+        const res = await updateSpaceBackground(space.id, up.url);
+        if (res.ok) router.refresh();
+        else setBgError(res.error);
+      }
+    } catch (err) {
+      setBgError(err instanceof Error ? err.message : "Upload failed.");
+    }
+    setBgBusy(false);
+    if (bgInputRef.current) bgInputRef.current.value = "";
+  };
+
+  const removeBackground = async () => {
+    setBgBusy(true);
+    setBgError(null);
+    const res = await updateSpaceBackground(space.id, "");
+    if (res.ok) router.refresh();
+    else setBgError(res.error);
+    setBgBusy(false);
+  };
+
   // Invite modal.
   const memberIds = new Set(space.members.map((m) => m.id));
   const invitableFriends = friends.filter((f) => !memberIds.has(f.id));
@@ -330,6 +376,71 @@ function SpaceDetail({
           )}
         </div>
       </form>
+
+      {/* Background (owner-only) — shared by everyone in the space */}
+      {isOwner && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+            Space background
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            A picture shown behind the app for everyone in this space. Leave it
+            empty for the default gradient.
+          </p>
+          <div className="mt-4 flex items-center gap-4">
+            <div
+              className="flex h-20 w-32 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-100 bg-cover bg-center text-center text-xs text-zinc-400 ring-1 ring-zinc-200 dark:bg-zinc-800 dark:ring-zinc-700"
+              style={
+                space.backgroundUrl
+                  ? { backgroundImage: `url('${space.backgroundUrl}')` }
+                  : undefined
+              }
+            >
+              {!space.backgroundUrl && "Default gradient"}
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={() => bgInputRef.current?.click()}
+                disabled={bgBusy}
+                className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                {bgBusy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ImagePlus className="size-4" />
+                )}
+                {bgBusy
+                  ? "Uploading…"
+                  : space.backgroundUrl
+                    ? "Change background"
+                    : "Upload background"}
+              </button>
+              {space.backgroundUrl && !bgBusy && (
+                <button
+                  type="button"
+                  onClick={removeBackground}
+                  className="ml-2 text-sm text-zinc-500 hover:text-red-600 dark:text-zinc-400 dark:hover:text-red-400"
+                >
+                  Remove
+                </button>
+              )}
+              {bgError && (
+                <p className="mt-1 break-words text-xs text-red-600 dark:text-red-400">
+                  {bgError}
+                </p>
+              )}
+            </div>
+          </div>
+          <input
+            ref={bgInputRef}
+            type="file"
+            accept="image/*,.heic,.heif"
+            className="hidden"
+            onChange={onPickBackground}
+          />
+        </div>
+      )}
 
       {/* Members */}
       <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

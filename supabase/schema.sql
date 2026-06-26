@@ -26,6 +26,7 @@ create table if not exists public.spaces (
   id               uuid primary key default gen_random_uuid(),
   name             text not null default 'Our Space',
   anniversary_date date,
+  background_url    text,            -- per-space backdrop (set by the owner)
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
@@ -332,6 +333,28 @@ drop trigger if exists spaces_touch_updated_at on public.spaces;
 create trigger spaces_touch_updated_at
   before update on public.spaces
   for each row execute function public.touch_updated_at();
+
+-- Only the space owner may change a space's background_url (members can still
+-- edit name/anniversary). RLS is row-level, so this column is gated by trigger.
+create or replace function public.enforce_space_background_owner()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.background_url is distinct from old.background_url
+     and not public.is_space_owner(new.id, auth.uid()) then
+    raise exception 'Only the space owner can change the background';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists spaces_background_owner_only on public.spaces;
+create trigger spaces_background_owner_only
+  before update on public.spaces
+  for each row execute function public.enforce_space_background_owner();
 
 drop trigger if exists profiles_touch_updated_at on public.profiles;
 create trigger profiles_touch_updated_at

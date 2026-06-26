@@ -9,6 +9,7 @@ export type Space = {
   id: string;
   name: string;
   anniversaryDate: string | null;
+  backgroundUrl: string | null;
 };
 
 export type SpaceMembership = {
@@ -16,6 +17,7 @@ export type SpaceMembership = {
   name: string;
   role: string;
   anniversaryDate: string | null;
+  backgroundUrl: string | null;
 };
 
 /** A member of a space, with the profile bits needed to render them. */
@@ -34,21 +36,21 @@ export type SpaceContext = {
   space: Space;
 };
 
+type SpaceEmbed = {
+  id: string;
+  name: string;
+  anniversary_date: string | null;
+  background_url: string | null;
+};
+
 type MemberRow = {
   space_id: string;
   role: string;
-  spaces:
-    | { id: string; name: string; anniversary_date: string | null }
-    | { id: string; name: string; anniversary_date: string | null }[]
-    | null;
+  spaces: SpaceEmbed | SpaceEmbed[] | null;
 };
 
-function embed(row: MemberRow) {
-  return (Array.isArray(row.spaces) ? row.spaces[0] : row.spaces) as {
-    id: string;
-    name: string;
-    anniversary_date: string | null;
-  };
+function embed(row: MemberRow): SpaceEmbed {
+  return (Array.isArray(row.spaces) ? row.spaces[0] : row.spaces) as SpaceEmbed;
 }
 
 /**
@@ -69,7 +71,7 @@ export async function getSpaceContext(): Promise<SpaceContext | null> {
 
   const { data, error } = await supabase
     .from("space_members")
-    .select("space_id, role, spaces(id, name, anniversary_date)")
+    .select("space_id, role, spaces(id, name, anniversary_date, background_url)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
@@ -88,7 +90,12 @@ export async function getSpaceContext(): Promise<SpaceContext | null> {
     supabase,
     user,
     spaceId: chosen.space_id,
-    space: { id: s.id, name: s.name, anniversaryDate: s.anniversary_date },
+    space: {
+      id: s.id,
+      name: s.name,
+      anniversaryDate: s.anniversary_date,
+      backgroundUrl: s.background_url,
+    },
   };
 }
 
@@ -109,7 +116,7 @@ export async function getUserSpaces(): Promise<SpaceMembership[]> {
 
   const { data } = await supabase
     .from("space_members")
-    .select("space_id, role, spaces(id, name, anniversary_date)")
+    .select("space_id, role, spaces(id, name, anniversary_date, background_url)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
@@ -122,6 +129,7 @@ export async function getUserSpaces(): Promise<SpaceMembership[]> {
         name: s.name,
         role: r.role,
         anniversaryDate: s.anniversary_date,
+        backgroundUrl: s.background_url,
       };
     });
 }
