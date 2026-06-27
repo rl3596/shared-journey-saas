@@ -2,7 +2,19 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, CalendarDays, Users, Pencil, Trash2, Loader2, Globe } from "lucide-react";
+import {
+  Plus,
+  X,
+  CalendarDays,
+  Users,
+  Pencil,
+  Trash2,
+  Loader2,
+  Globe,
+  ChevronLeft,
+  ChevronRight,
+  List,
+} from "lucide-react";
 import type { ScheduleEvent } from "@/data/schedule";
 import type { SpaceMember } from "@/lib/data";
 import { createEvent, updateEvent, deleteEvent } from "@/lib/actions/schedule";
@@ -20,6 +32,14 @@ import {
 const FILTERS = ["All", "Mine", "Joint"] as const;
 type Filter = (typeof FILTERS)[number];
 type Scope = "upcoming" | "past";
+type View = "list" | "calendar";
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** Local YYYY-MM-DD for a Date. */
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 const inputClass =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-rose-400 focus:ring-2 focus:ring-rose-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100";
@@ -130,6 +150,13 @@ export default function ScheduleBoard({
   const zones = useMemo(() => allTimeZones(), []);
   const [filter, setFilter] = useState<Filter>("All");
   const [scope, setScope] = useState<Scope>("upcoming");
+  const [view, setView] = useState<View>("list");
+  // Displayed calendar month (0-indexed month).
+  const [cal, setCal] = useState(() => {
+    const d = new Date();
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ScheduleEvent | null>(null);
@@ -176,12 +203,58 @@ export default function ScheduleBoard({
     return out;
   }, [events, filter, scope, currentUserId, viewerTz, now]);
 
-  const openCreate = (m: DraftMode) => {
+  // Owner-filtered events (no time scope) grouped by their own date — for the
+  // calendar, which browses by month rather than upcoming/past.
+  const eventsByDate = useMemo(() => {
+    const map = new Map<string, ScheduleEvent[]>();
+    for (const e of events) {
+      if (filter === "Mine" && e.creatorId !== currentUserId) continue;
+      if (filter === "Joint" && !e.isJoint) continue;
+      const arr = map.get(e.date) ?? [];
+      arr.push(e);
+      map.set(e.date, arr);
+    }
+    for (const arr of map.values())
+      arr.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+    return map;
+  }, [events, filter, currentUserId]);
+
+  // Cells for the displayed month: leading blanks to the first weekday, then
+  // each day, padded to whole weeks.
+  const cells = useMemo(() => {
+    const startWeekday = new Date(cal.y, cal.m, 1).getDay();
+    const daysInMonth = new Date(cal.y, cal.m + 1, 0).getDate();
+    const out: ({ date: string; day: number } | null)[] = [];
+    for (let i = 0; i < startWeekday; i++) out.push(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      out.push({ date: ymd(new Date(cal.y, cal.m, d)), day: d });
+    }
+    while (out.length % 7 !== 0) out.push(null);
+    return out;
+  }, [cal]);
+
+  const todayStr = useMemo(() => ymd(new Date(now)), [now]);
+  const monthLabel = new Date(cal.y, cal.m, 1).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+  const shiftMonth = (delta: number) =>
+    setCal((c) => {
+      const d = new Date(c.y, c.m + delta, 1);
+      return { y: d.getFullYear(), m: d.getMonth() };
+    });
+  const goToday = () => {
+    const d = new Date();
+    setCal({ y: d.getFullYear(), m: d.getMonth() });
+    setSelectedDate(todayStr);
+  };
+
+  const openCreate = (m: DraftMode, date?: string) => {
     setEditing(null);
     setMode(m);
     setForm({
       title: "",
-      date: todayISO(),
+      date: date || todayISO(),
       time: "12:00",
       timezone: detectTimeZone(),
       notes: "",
@@ -276,6 +349,54 @@ export default function ScheduleBoard({
     };
   }, [dialogOpen, deleteTarget, busy]);
 
+  const renderEvent = (e: ScheduleEvent) => {
+    const s = styleFor(e, currentUserId);
+    const mine = e.creatorId === currentUserId;
+    const people = [mine ? "You" : e.creatorName, ...e.participantNames].join(", ");
+    return (
+      <div
+        key={e.id}
+        className={`relative rounded-r-lg border-l-4 bg-white p-4 shadow-sm ring-1 ring-zinc-100 ${s.border} dark:bg-zinc-900 dark:ring-zinc-800`}
+      >
+        {mine && (
+          <div className="absolute right-2 top-2 flex gap-0.5">
+            <button
+              type="button"
+              onClick={() => openEdit(e)}
+              aria-label="Edit event"
+              className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-rose-600 dark:hover:bg-zinc-800 dark:hover:text-rose-400"
+            >
+              <Pencil className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(e)}
+              aria-label="Delete event"
+              className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-800 dark:hover:text-red-400"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2 pr-16">
+          <EventTime e={e} viewerTz={viewerTz} />
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.badge}`}>
+            {e.isJoint ? "Joint" : mine ? "You" : e.creatorName}
+          </span>
+        </div>
+        <h3 className="mt-1 font-semibold text-zinc-900 dark:text-zinc-50">
+          {e.title}
+        </h3>
+        {e.isJoint && (
+          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{people}</p>
+        )}
+        {e.notes && (
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{e.notes}</p>
+        )}
+      </div>
+    );
+  };
+
   const hasMembers = members.length > 0;
 
   return (
@@ -283,24 +404,26 @@ export default function ScheduleBoard({
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Upcoming / Past */}
-          <div className="inline-flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800">
-            {(["upcoming", "past"] as const).map((sc) => (
-              <button
-                key={sc}
-                type="button"
-                onClick={() => setScope(sc)}
-                aria-pressed={scope === sc}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
-                  scope === sc
-                    ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-50"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                }`}
-              >
-                {sc}
-              </button>
-            ))}
-          </div>
+          {/* Upcoming / Past (list view only) */}
+          {view === "list" && (
+            <div className="inline-flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800">
+              {(["upcoming", "past"] as const).map((sc) => (
+                <button
+                  key={sc}
+                  type="button"
+                  onClick={() => setScope(sc)}
+                  aria-pressed={scope === sc}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
+                    scope === sc
+                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-50"
+                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  {sc}
+                </button>
+              ))}
+            </div>
+          )}
           {/* All / Mine / Joint */}
           <div className="flex flex-wrap gap-2">
             {FILTERS.map((f) => {
@@ -323,92 +446,192 @@ export default function ScheduleBoard({
             })}
           </div>
         </div>
-        {hasMembers && (
-          <button
-            type="button"
-            onClick={() => openCreate("joint")}
-            className="inline-flex items-center gap-2 rounded-lg border border-purple-300 px-3 py-1.5 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-50 dark:border-purple-900/50 dark:text-purple-300 dark:hover:bg-purple-950/30"
-          >
-            <Users className="size-4" />
-            Create joint event
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* List / Calendar switch */}
+          <div className="inline-flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800">
+            <button
+              type="button"
+              onClick={() => setView("list")}
+              aria-pressed={view === "list"}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                view === "list"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-50"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              <List className="size-4" />
+              <span className="hidden sm:inline">List</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("calendar")}
+              aria-pressed={view === "calendar"}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                view === "calendar"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-50"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              <CalendarDays className="size-4" />
+              <span className="hidden sm:inline">Calendar</span>
+            </button>
+          </div>
+          {hasMembers && (
+            <button
+              type="button"
+              onClick={() => openCreate("joint")}
+              className="inline-flex items-center gap-2 rounded-lg border border-purple-300 px-3 py-1.5 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-50 dark:border-purple-900/50 dark:text-purple-300 dark:hover:bg-purple-950/30"
+            >
+              <Users className="size-4" />
+              Create joint event
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Event list grouped by date */}
-      <div className="mt-6 space-y-6">
-        {groups.length === 0 && (
-          <div className="rounded-xl border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            {scope === "past"
-              ? "No past events to look back on yet."
-              : "No upcoming events. Tap the + button to add one."}
-          </div>
-        )}
-        {groups.map((group) => (
-          <div key={group.date}>
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-              <CalendarDays className="size-4" />
-              {formatDate(group.date)}
+      {view === "list" ? (
+        /* Event list grouped by date */
+        <div className="mt-6 space-y-6">
+          {groups.length === 0 && (
+            <div className="rounded-xl border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+              {scope === "past"
+                ? "No past events to look back on yet."
+                : "No upcoming events. Tap the + button to add one."}
             </div>
-            <div className="space-y-2">
-              {group.items.map((e) => {
-                const s = styleFor(e, currentUserId);
-                const mine = e.creatorId === currentUserId;
-                const people = [
-                  mine ? "You" : e.creatorName,
-                  ...e.participantNames,
-                ].join(", ");
-                return (
-                  <div
-                    key={e.id}
-                    className={`relative rounded-r-lg border-l-4 bg-white p-4 shadow-sm ring-1 ring-zinc-100 ${s.border} dark:bg-zinc-900 dark:ring-zinc-800`}
+          )}
+          {groups.map((group) => (
+            <div key={group.date}>
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                <CalendarDays className="size-4" />
+                {formatDate(group.date)}
+              </div>
+              <div className="space-y-2">
+                {group.items.map((e) => renderEvent(e))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        /* Calendar */
+        <div className="mt-6">
+          {/* Month navigation */}
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => shiftMonth(-1)}
+                aria-label="Previous month"
+                className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+              >
+                <ChevronLeft className="size-5" />
+              </button>
+              <h2 className="min-w-36 text-center text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                {monthLabel}
+              </h2>
+              <button
+                type="button"
+                onClick={() => shiftMonth(1)}
+                aria-label="Next month"
+                className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+              >
+                <ChevronRight className="size-5" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={goToday}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Today
+            </button>
+          </div>
+
+          {/* Weekday header */}
+          <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-zinc-400">
+            {WEEKDAYS.map((w) => (
+              <div key={w} className="py-1">
+                {w}
+              </div>
+            ))}
+          </div>
+
+          {/* Day grid */}
+          <div className="mt-1 grid grid-cols-7 gap-1">
+            {cells.map((cell, i) => {
+              if (!cell) return <div key={`b${i}`} className="min-h-[4.5rem]" />;
+              const dayEvents = eventsByDate.get(cell.date) ?? [];
+              const isToday = cell.date === todayStr;
+              const isSelected = cell.date === selectedDate;
+              return (
+                <button
+                  key={cell.date}
+                  type="button"
+                  onClick={() => setSelectedDate(cell.date)}
+                  className={`flex min-h-[4.5rem] flex-col rounded-lg border p-1 text-left align-top transition-colors sm:min-h-24 ${
+                    isSelected
+                      ? "border-rose-400 bg-rose-50 dark:border-rose-700 dark:bg-rose-950/30"
+                      : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50"
+                  }`}
+                >
+                  <span
+                    className={`flex size-5 items-center justify-center rounded-full text-xs ${
+                      isToday
+                        ? "bg-rose-500 font-bold text-white"
+                        : "text-zinc-500 dark:text-zinc-400"
+                    }`}
                   >
-                    {mine && (
-                      <div className="absolute right-2 top-2 flex gap-0.5">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(e)}
-                          aria-label="Edit event"
-                          className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-rose-600 dark:hover:bg-zinc-800 dark:hover:text-rose-400"
-                        >
-                          <Pencil className="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(e)}
-                          aria-label="Delete event"
-                          className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-800 dark:hover:text-red-400"
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap items-center gap-2 pr-16">
-                      <EventTime e={e} viewerTz={viewerTz} />
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.badge}`}>
-                        {e.isJoint ? "Joint" : mine ? "You" : e.creatorName}
+                    {cell.day}
+                  </span>
+                  <span className="mt-0.5 flex flex-col gap-0.5 overflow-hidden">
+                    {dayEvents.slice(0, 3).map((e) => (
+                      <span
+                        key={e.id}
+                        className={`truncate rounded px-1 py-0.5 text-[10px] font-medium leading-tight ${styleFor(e, currentUserId).badge}`}
+                      >
+                        {e.title}
                       </span>
-                    </div>
-                    <h3 className="mt-1 font-semibold text-zinc-900 dark:text-zinc-50">
-                      {e.title}
-                    </h3>
-                    {e.isJoint && (
-                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                        {people}
-                      </p>
+                    ))}
+                    {dayEvents.length > 3 && (
+                      <span className="px-1 text-[10px] text-zinc-400">
+                        +{dayEvents.length - 3} more
+                      </span>
                     )}
-                    {e.notes && (
-                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                        {e.notes}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        ))}
-      </div>
+
+          {/* Selected-day detail */}
+          {selectedDate && (
+            <div className="mt-5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                  <CalendarDays className="size-4" />
+                  {formatDate(selectedDate)}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => openCreate("personal", selectedDate)}
+                  className="inline-flex items-center gap-1 rounded-lg bg-rose-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-rose-600"
+                >
+                  <Plus className="size-3.5" />
+                  Add
+                </button>
+              </div>
+              {(eventsByDate.get(selectedDate) ?? []).length === 0 ? (
+                <p className="rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+                  Nothing planned for this day.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {(eventsByDate.get(selectedDate) ?? []).map((e) => renderEvent(e))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Floating add (personal) */}
       <button
