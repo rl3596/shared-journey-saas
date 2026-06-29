@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Navigation from "@/components/navigation";
+import NotificationsRealtime from "@/components/notifications-realtime";
 import { JourneyAdminProvider } from "@/components/journey-admin-context";
 import { getProfile, displayName } from "@/lib/profile";
 import { getSpaceContext, getUserSpaces } from "@/lib/space";
@@ -48,6 +49,7 @@ export default async function SiteLayout({
         avatarUrl={profile?.avatarUrl ?? null}
         notifications={notifications}
       />
+      <NotificationsRealtime currentUserId={ctx.user.id} />
       <main className="md:ml-64">
         <div className="mx-auto max-w-6xl px-6 py-10">{children}</div>
       </main>

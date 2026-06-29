@@ -539,6 +539,19 @@ create policy "notifications update" on public.notifications
 create policy "notifications delete" on public.notifications
   for delete using (user_id = auth.uid());
 
+-- Realtime: stream notification INSERTs to the owner over WebSockets (RLS still
+-- applies, so each user only receives their own rows).
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+     where pubname = 'supabase_realtime'
+       and schemaname = 'public' and tablename = 'notifications'
+  ) then
+    alter publication supabase_realtime add table public.notifications;
+  end if;
+end $$;
+
 drop function if exists public.get_friends_overview();
 create or replace function public.get_friends_overview()
 returns table (
