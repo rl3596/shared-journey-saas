@@ -9,10 +9,12 @@ SQL editor before/with the deploy.
 
 ## [Unreleased]
 
-_Local changes not yet pushed to GitHub._
+_Nothing yet._
 
-- **Docs:** added this version log (`CHANGELOG.md`) and rewrote `README.md`
-  to cover the app, backend, database, frontend layout, and the
+## [0.7.1] — 2026-06-30 — Documentation
+
+- Added this version log (`CHANGELOG.md`) and rewrote `README.md` to cover the
+  app, backend technologies, database structure, frontend layout, and the
   Supabase ↔ GitHub ↔ Vercel deployment flow.
 
 ## [0.7.0] — 2026-06-29 — Real-time & Space Notes
@@ -81,4 +83,3 @@ _Local changes not yet pushed to GitHub._
 - Multi-tenant schema: `spaces`, `profiles`, `space_members`, and all content
   tables scoped by `space_id` with strict Row Level Security.
 
-[Unreleased]: https://github.com/rl3596/shared-journey-saas/compare/v0.7.0...HEAD
