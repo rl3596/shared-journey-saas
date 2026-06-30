@@ -6,6 +6,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronsUpDown, Check, Plus, Loader2 } from "lucide-react";
 import { setActiveSpace, createSpace } from "@/lib/actions/space";
 import { useJourneyAdmin } from "@/components/journey-admin-context";
+import { useSpaceActivity } from "@/components/space-activity-context";
 
 type SpaceItem = { id: string; name: string; role: string };
 
@@ -25,7 +26,10 @@ export default function SpaceSwitcher({
 }) {
   const router = useRouter();
   const active = spaces.find((s) => s.id === activeSpaceId) ?? spaces[0];
+  const { unread, clear } = useSpaceActivity();
+  const hasOtherUnread = [...unread].some((id) => id !== activeSpaceId);
 
+  const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -50,6 +54,7 @@ export default function SpaceSwitcher({
 
   const switchTo = async (id: string) => {
     if (id === activeSpaceId) return;
+    clear(id); // entering a space marks its notes seen
     setSwitching(true);
     await setActiveSpace(id);
     router.refresh();
@@ -74,20 +79,24 @@ export default function SpaceSwitcher({
 
   return (
     <>
-      <DropdownMenu.Root>
+      <DropdownMenu.Root open={open} onOpenChange={setOpen}>
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
-            aria-label="Switch space"
+            aria-label={`Switch space${hasOtherUnread ? " (new activity in another space)" : ""}`}
             className="flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             <span
               role="button"
               tabIndex={-1}
               onClick={handleSecret}
-              className="flex size-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-rose-400 to-amber-400 text-sm font-bold text-white"
+              className="relative flex size-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-rose-400 to-amber-400 text-sm font-bold text-white"
             >
               {squareInitial(active?.name ?? "·")}
+              {/* Collapsed: aggregate red dot when another space has new notes. */}
+              {!open && hasOtherUnread && (
+                <span className="absolute -right-1 -top-1 size-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-zinc-950" />
+              )}
             </span>
             <span className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
               {active?.name ?? "Space"}
@@ -119,6 +128,10 @@ export default function SpaceSwitcher({
                   {squareInitial(s.name)}
                 </span>
                 <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                {/* Expanded: red dot on the specific space with new notes. */}
+                {unread.has(s.id) && s.id !== activeSpaceId && (
+                  <span className="size-2.5 shrink-0 rounded-full bg-red-500" />
+                )}
                 {s.id === activeSpaceId && (
                   <Check className="size-4 shrink-0 text-rose-500" />
                 )}

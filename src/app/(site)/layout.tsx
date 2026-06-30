@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Navigation from "@/components/navigation";
 import NotificationsRealtime from "@/components/notifications-realtime";
 import SpaceNotesBoard from "@/components/space-notes-board";
+import { SpaceActivityProvider } from "@/components/space-activity-context";
 import { JourneyAdminProvider } from "@/components/journey-admin-context";
 import { getProfile, displayName } from "@/lib/profile";
 import { getSpaceContext, getUserSpaces } from "@/lib/space";
@@ -42,14 +43,19 @@ export default async function SiteLayout({
           <div className="absolute inset-0 bg-white/55 dark:bg-zinc-950/60" />
         </div>
       )}
-      <Navigation
-        spaces={spaces}
+      <SpaceActivityProvider
         activeSpaceId={ctx.spaceId}
-        displayName={displayName(profile)}
-        handle={profile?.handle ?? null}
-        avatarUrl={profile?.avatarUrl ?? null}
-        notifications={notifications}
-      />
+        currentUserId={ctx.user.id}
+      >
+        <Navigation
+          spaces={spaces}
+          activeSpaceId={ctx.spaceId}
+          displayName={displayName(profile)}
+          handle={profile?.handle ?? null}
+          avatarUrl={profile?.avatarUrl ?? null}
+          notifications={notifications}
+        />
+      </SpaceActivityProvider>
       <NotificationsRealtime currentUserId={ctx.user.id} />
       <SpaceNotesBoard
         spaceId={ctx.spaceId}
