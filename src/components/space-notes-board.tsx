@@ -350,7 +350,7 @@ function SpaceNotesInner({
   const showDot = view !== "expanded" && pendingDot;
 
   return (
-    <div className="fixed bottom-6 left-4 z-40 md:left-[17rem]">
+    <div className="fixed bottom-6 right-4 z-40 flex flex-col items-end sm:right-6">
       <AnimatePresence mode="wait">
         {view === "expanded" ? (
           <motion.div
@@ -452,7 +452,7 @@ function SpaceNotesInner({
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            className="flex flex-col items-start gap-2"
+            className="flex flex-col items-end gap-2"
           >
             {/* Stacked-deck peek */}
             {view === "collapsed" && notes.length > 0 && (
@@ -462,8 +462,8 @@ function SpaceNotesInner({
                 aria-label="Open space notes"
                 className="relative block w-60 max-w-[calc(100vw-2rem)] text-left"
               >
-                <span className="absolute -right-1.5 -top-1.5 h-full w-full rounded-xl border border-zinc-200 bg-white/70 dark:border-zinc-800 dark:bg-zinc-900/70" />
-                <span className="absolute -right-0.5 -top-0.5 h-full w-full rounded-xl border border-zinc-200 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/90" />
+                <span className="absolute -left-1.5 -top-1.5 h-full w-full rounded-xl border border-zinc-200 bg-white/70 dark:border-zinc-800 dark:bg-zinc-900/70" />
+                <span className="absolute -left-0.5 -top-0.5 h-full w-full rounded-xl border border-zinc-200 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/90" />
                 <div
                   className={`relative rounded-xl border p-3 shadow-lg ${COLORS[notes[0].color] ?? COLORS.amber}`}
                 >

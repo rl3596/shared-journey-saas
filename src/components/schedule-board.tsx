@@ -633,12 +633,13 @@ export default function ScheduleBoard({
         </div>
       )}
 
-      {/* Floating add (personal) */}
+      {/* Floating add (personal). Sits above the Space Notes FAB (also
+          bottom-right) so the two don't overlap. */}
       <button
         type="button"
         onClick={() => openCreate("personal")}
         aria-label="Add event"
-        className="fixed bottom-6 right-6 z-40 flex size-14 items-center justify-center rounded-full bg-rose-500 text-white shadow-lg transition hover:scale-105 hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200 dark:focus:ring-rose-900/50"
+        className="fixed bottom-24 right-6 z-40 flex size-14 items-center justify-center rounded-full bg-rose-500 text-white shadow-lg transition hover:scale-105 hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200 dark:focus:ring-rose-900/50"
       >
         <Plus className="size-6" />
       </button>
