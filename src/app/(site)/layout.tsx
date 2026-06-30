@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Navigation from "@/components/navigation";
 import NotificationsRealtime from "@/components/notifications-realtime";
+import SpaceNotesBoard from "@/components/space-notes-board";
 import { JourneyAdminProvider } from "@/components/journey-admin-context";
 import { getProfile, displayName } from "@/lib/profile";
 import { getSpaceContext, getUserSpaces } from "@/lib/space";
@@ -50,6 +51,12 @@ export default async function SiteLayout({
         notifications={notifications}
       />
       <NotificationsRealtime currentUserId={ctx.user.id} />
+      <SpaceNotesBoard
+        spaceId={ctx.spaceId}
+        currentUserId={ctx.user.id}
+        currentUserName={displayName(profile)}
+        currentUserAvatar={profile?.avatarUrl ?? null}
+      />
       <main className="md:ml-64">
         <div className="mx-auto max-w-6xl px-6 py-10">{children}</div>
       </main>
